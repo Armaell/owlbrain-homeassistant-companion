@@ -1,0 +1,123 @@
+from __future__ import annotations
+
+from dataclasses import replace
+from typing import Any, Optional, Dict
+
+from homeassistant.helpers.entity import Entity
+from homeassistant.core import HomeAssistant
+
+from ..const import DOMAIN
+from ..models.entity import EntityModel
+
+class OwlBrainBaseEntity(Entity):
+	"""Base class to all entity domains"""
+
+	_attr_should_poll = False
+
+	def __init__(
+		self,
+		hass: HomeAssistant,
+		manager,
+		model: EntityModel,
+	) -> None:
+		self.hass = hass
+		self._manager = manager
+		self._model = model
+
+		self.entity_id = model.entity_id
+
+		self._attr_unique_id = model.unique_id
+		self._attr_name = model.metadata.get("name")
+
+		self._attr_has_entity_name = False
+
+	@property
+	def available(self) -> bool:
+		"""Availability can be controlled by data.available.
+		But it also require for a active and subscribed connection"""
+		return self._model.data.get("available") is not False and self._manager.broadcaster.available(self.owl_namespace)
+
+	@property
+	def name(self) -> Optional[str]:
+		return self._model.metadata.get("name")
+
+	@property
+	def device_info(self) -> Optional[dict[str, Any]]:
+		"""Return device info if this entity is attached to a device."""
+		device_id = self._model.metadata.get("device_id")
+
+		if not device_id:
+			return None
+
+		device = self._manager.store.sync_get_device(
+			self.owl_namespace,
+			device_id,
+		)
+		if not device:
+			return None
+
+		metadata = device.metadata
+		return {
+			"identifiers": {(DOMAIN, device.unique_id)},
+			"connections": metadata.get("connections"),
+			"manufacturer": metadata.get("manufacturer"),
+			"model": metadata.get("model"),
+			"name": metadata.get("name"),
+			"sw_version": metadata.get("sw_version"),
+			"hw_version": metadata.get("hw_version"),
+			"serial_number": metadata.get("serial_number"),
+			"via_device": metadata.get("via_device"),
+			"suggested_area": metadata.get("suggested_area"),
+			"configuration_url": metadata.get("configuration_url")
+		}
+
+	@property
+	def entity_category(self) -> Optional[str]:
+		return self._model.metadata.get("entity_category")
+
+	@property
+	def icon(self) -> Optional[str]:
+		return self._model.metadata.get("icon")
+
+	@property
+	def translation_key(self) -> Optional[str]:
+		return self._model.metadata.get("translation_key")
+
+	@property
+	def entity_picture(self) -> Optional[str]:
+		return self._model.metadata.get("entity_picture")
+
+	async def async_update_metadata(self, metadata: Dict[str, Any]) -> None:
+		self._model.metadata = metadata
+		self.async_write_ha_state()
+
+
+	async def async_update_data(self, new_data: Dict[str, Any]) -> Dict[str, Any]:
+		updated = dict(self.owl_model.data)
+
+		if "available" in new_data:
+			updated["available"] = bool(new_data["available"])
+
+		self.owl_model.data = updated
+
+		self.async_write_ha_state()
+
+		return self.owl_model.data
+
+	@property
+	def owl_model(self) -> EntityModel:
+		"""Expose the underlying model to subclasses."""
+		return self._model
+
+	@property
+	def owl_namespace(self) -> str:
+		return self._model.namespace
+
+	@property
+	def owl_entity_id(self) -> str:
+		return self._model.entity_id
+
+	async def _broadcast_entity_action(self, action: str, data: Any):
+		await self._manager.broadcaster.broadcast_entity_action(
+			self.owl_namespace, self.owl_entity_id, action, data
+		)

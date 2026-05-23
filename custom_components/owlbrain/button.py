@@ -1,31 +1,16 @@
-from homeassistant.components.button import ButtonEntity
-from homeassistant.helpers.restore_state import RestoreEntity
-from .entity import OwlBrainEntity
+from __future__ import annotations
 
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.config_entries import ConfigEntry
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    registry = hass.data["owlbrain"][entry.entry_id]
+from .manager import OwlBrainManager
+from .const import DOMAIN
 
-    entities = []
-
-    for entity in registry.data["entities"].values():
-        if entity["platform"] == "button":
-            entities.append(OwlBrainButton(registry, entity))
-
-    registry.register_adder("button", async_add_entities)
-
-    async_add_entities(entities)
-
-
-class OwlBrainButton(OwlBrainEntity, ButtonEntity, RestoreEntity):
-
-    async def async_press(self) -> None:
-        await self.registry.update_entity_state(
-            self._data["namespace"],
-            self._data["id"],
-            True,
-        )
-
-    @property
-    def device_class(self):
-        return self._data.get("device_class")
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    manager: OwlBrainManager = hass.data[DOMAIN]["manager"]
+    manager.entities.register_platform("button", async_add_entities)

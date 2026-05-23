@@ -1,35 +1,44 @@
+from __future__ import annotations
+
+import logging
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.typing import ConfigType
+from .store import OwlBrainStore
 
-from .const import DOMAIN, SUPPORTED_ENTITY_TYPES
-from .storage import OwlBrainStorage
-from .registry import OwlBrainRegistry
-from .websocket import register_ws
+from .websocket_api import async_register_websocket_api
 
-async def async_setup(hass: HomeAssistant, config):
+from .const import (DOMAIN, PLATFORMS)
+from .manager import OwlBrainManager
+
+_LOGGER = logging.getLogger(__name__)
+
+DOMAIN = DOMAIN
+
+async def async_setup(hass: HomeAssistant, config: ConfigType):
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
-    storage = OwlBrainStorage(hass)
-    registry = OwlBrainRegistry(hass, storage, entry)
+    store = OwlBrainStore(hass)
+    manager = OwlBrainManager(hass, store)
 
-    await registry.async_load()
+    hass.data.setdefault(DOMAIN, {})["manager"] = manager
 
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = registry
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    await manager.entities.restore_runtime_entities()
 
-    register_ws(hass, registry)
+    async_register_websocket_api(hass, manager)
 
-    await hass.config_entries.async_forward_entry_setups(
-        entry,
-        list(SUPPORTED_ENTITY_TYPES)
-    )
-
+    _LOGGER.info("OwlBrain integration initialized")
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
-    hass.data[DOMAIN].pop(entry.entry_id)
-    return True
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+    if unload_ok:
+        hass.data[DOMAIN].pop("manager", None)
+
+    return unload_ok
