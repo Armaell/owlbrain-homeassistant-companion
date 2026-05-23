@@ -1,44 +1,16 @@
-from homeassistant.components.switch import SwitchEntity
-from homeassistant.helpers.restore_state import RestoreEntity
-from .entity import OwlBrainEntity
+from __future__ import annotations
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    registry = hass.data["owlbrain"][entry.entry_id]
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.config_entries import ConfigEntry
 
-    entities = []
+from .manager import OwlBrainManager
+from .const import DOMAIN
 
-    for entity in registry.data["entities"].values():
-        if entity["platform"] == "switch":
-            entities.append(OwlBrainSwitch(registry, entity))
-
-    registry.register_adder("switch", async_add_entities)
-
-    async_add_entities(entities)
-
-
-class OwlBrainSwitch(OwlBrainEntity, SwitchEntity, RestoreEntity):
-    @property
-    def is_on(self):
-        return bool(self._data.get("state"))
-
-    @property
-    def state(self):
-        state = self._data.get("state")
-        if state is None:
-            return None
-        return "on" if state else "off"
-
-
-    async def async_turn_on(self, **kwargs):
-        await self.registry.update_entity_state(
-            self._data["namespace"],
-            self._data["id"],
-            True,
-        )
-
-    async def async_turn_off(self, **kwargs):
-        await self.registry.update_entity_state(
-            self._data["namespace"],
-            self._data["id"],
-            False,
-        )
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    manager: OwlBrainManager = hass.data[DOMAIN]["manager"]
+    manager.entities.register_platform("switch", async_add_entities)

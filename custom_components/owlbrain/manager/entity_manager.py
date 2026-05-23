@@ -1,0 +1,181 @@
+from __future__ import annotations
+
+import asyncio
+import logging
+from typing import Any
+
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+from ..store import OwlBrainStore
+from ..errors import (
+	OwlDeviceNotFoundError,
+	OwlEntityNotFoundError,
+	OwlUnsupportedDomainError,
+	OwlPlatformNotReadyError
+)
+from ..domain import DOMAIN_HANDLERS
+from ..models.entity import EntityModel
+from ..utils.ids import build_unique_id_entity
+
+_LOGGER = logging.getLogger(__name__)
+
+class OwlBrainEntityManager:
+	def __init__(self, hass: HomeAssistant, manager, store: OwlBrainStore):
+		self._lock = asyncio.Lock()
+		self.hass = hass
+		self.manager = manager
+		self.store = store
+
+		# Runtime HA entities (unique_id, entity instance)
+		self.runtime_entities: dict[str, Any] = {}
+
+		# Platform adders (domain, async_add_entities)
+		self.platform_adders: dict[str, AddEntitiesCallback] = {}
+
+	def register_platform(self, domain: str, adder: AddEntitiesCallback):
+		"""Called by each platform file (sensor.py, switch.py, etc.)."""
+		self.platform_adders[domain] = adder
+
+	async def restore_runtime_entities(self) -> None:
+		"""Recreate all runtime entities from persisted storage."""
+		entities = await self.store.get_entities()
+		async with self._lock:
+			for key, entity in entities.items():
+				await self._create_runtime_entity(entity)
+
+		_LOGGER.info("OwlBrain restored %s entities", len(entities))
+
+	async def create(self, namespace: str, entity_id: str, metadata: dict) -> EntityModel:
+		async with self._lock:
+			domain = entity_id.split(".")[0]
+			if domain not in DOMAIN_HANDLERS:
+				raise OwlUnsupportedDomainError(domain)
+
+			# Namespace collision check
+			entities = await self.store.get_entities()
+			for (ns, eid) in entities.keys():
+				if eid == entity_id and ns != namespace:
+					raise ValueError("Entity already exists in another namespace")
+
+			# Build model
+			model = EntityModel(
+				namespace=namespace,
+				entity_id=entity_id,
+				domain=domain,
+				unique_id=build_unique_id_entity(namespace, entity_id),
+				data={},
+				metadata=metadata,
+			)
+
+			# Device association
+			device_id = metadata.get("device_id")
+			if device_id:
+				device = await self.store.get_device(namespace, device_id)
+				if device is None:
+					raise OwlDeviceNotFoundError(device_id)
+				model.device_id = device_id
+
+			await self.store.set_entity(model)
+			await self._create_runtime_entity(model)
+			await self.manager.devices.cleanup_empty(namespace)
+			await self.store.save()
+
+			_LOGGER.info(f"created entity {entity_id}")
+			return model
+
+	async def update_metadata(self, namespace: str, entity_id: str, metadata: dict):
+		async with self._lock:
+			entity = await self.store.get_entity(namespace, entity_id)
+
+			if entity is None:
+				raise OwlEntityNotFoundError(entity_id)
+
+			entity.metadata = metadata
+
+			# Device association
+			device_id = metadata.get("device_id")
+			if device_id:
+				device = await self.store.get_device(namespace, device_id)
+				if device is None:
+					raise OwlDeviceNotFoundError(device_id)
+				entity.device_id = device_id
+			else:
+				entity.device_id = None
+
+			await self.store.save_entity(entity)
+
+			runtime = self.runtime_entities.get(entity.unique_id)
+			if runtime:
+				await runtime.async_update_metadata(metadata)
+
+			_LOGGER.debug(f"updated entity {entity_id}'s metadata with {metadata}")
+			return entity
+
+	async def update_data(self, namespace: str, entity_id: str, data: dict) -> EntityModel:
+		async with self._lock:
+			entity = await self.store.get_entity(namespace, entity_id)
+
+			if entity is None:
+				raise OwlEntityNotFoundError(entity_id)
+
+			runtime = self.runtime_entities.get(entity.unique_id)
+			if runtime:
+				data = await runtime.async_update_data(data)
+				entity.data = data
+				await self.store.save_entity(entity)
+
+			return entity
+
+
+	async def delete(self, namespace: str, entity_id: str):
+		async with self._lock:
+			await self.remove_entity_from_registries(namespace, entity_id)
+			await self.manager.devices.cleanup_empty(namespace)
+			await self.store.save()
+			_LOGGER.debug("Deleted entity %s", entity_id)
+
+	async def _create_runtime_entity(self, model: EntityModel):
+		"""Create a HA entity instance and inject it into the platform."""
+		domain = model.domain
+		entity_cls = DOMAIN_HANDLERS.get(domain)
+		if not entity_cls:
+			raise OwlUnsupportedDomainError(domain)
+
+		if domain not in self.platform_adders:
+			raise OwlPlatformNotReadyError(domain)
+
+		entity = entity_cls(self.hass, self.manager, model)
+		self.runtime_entities[model.unique_id] = entity
+
+		# Inject into HA
+		self.platform_adders[domain]([entity])
+
+
+	async def remove_entity_from_registries(self, namespace: str, entity_id: str):
+		"""Remove entity from internal and HA registries"""
+		entity = await self.store.get_entity(namespace, entity_id)
+
+		if entity is None:
+			raise OwlEntityNotFoundError(entity_id)
+
+		unique_id = entity.unique_id
+
+		entity_registry = er.async_get(self.hass)
+		entry = entity_registry.async_get_entity_id(entity.domain, "owlbrain", unique_id)
+
+		if entry:
+			entity_registry.async_remove(entry)
+
+		runtime = self.runtime_entities.pop(unique_id, None)
+		if runtime:
+			await runtime.async_remove()
+
+		self.store.remove_entity(entity)
+
+	def force_ha_refresh(self, namespace: str):
+		# force refresh all ha entities in this namespace
+		for entity in self.runtime_entities.values():
+			if entity.owl_namespace == namespace:
+				entity.async_write_ha_state()

@@ -3,7 +3,7 @@
 Home Assistant integration that provides support for [**OwlBrain Home Assistant integration**](https://github.com/Armaell/owlbrain-homeassistant) to provide managed entities.
 This integration is installable through [HACS](https://hacs.xyz/) and supports UI-based configuration via Home Assistant’s config flow.
 
-## 📦 Installation
+## Installation
 
 ### Option 1 — HACS
 
@@ -17,7 +17,7 @@ This integration is installable through [HACS](https://hacs.xyz/) and supports U
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 This integration uses Home Assistant’s **config flow**, so setup happens entirely in the UI.
 
@@ -27,3 +27,11 @@ This integration uses Home Assistant’s **config flow**, so setup happens entir
 4. Follow the on-screen instructions
 
 If the integration does not appear, try clearing your browser cache or restarting Home Assistant.
+
+## Contributing
+
+To run the development environement run the command
+```
+cd dev
+docker compose up --build
+```

@@ -1,38 +1,16 @@
-from homeassistant.components.sensor import SensorEntity
-from homeassistant.helpers.restore_state import RestoreEntity
-from .entity import OwlBrainEntity
+from __future__ import annotations
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    registry = hass.data["owlbrain"][entry.entry_id]
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.config_entries import ConfigEntry
 
-    entities = []
+from .manager import OwlBrainManager
+from .const import DOMAIN
 
-    for entity in registry.data["entities"].values():
-        if entity["platform"] == "sensor":
-            entities.append(OwlBrainSensor(registry, entity))
-
-    registry.register_adder("sensor", async_add_entities)
-
-    async_add_entities(entities)
-
-
-class OwlBrainSensor(OwlBrainEntity, SensorEntity, RestoreEntity):
-    @property
-    def native_value(self):
-        return self._data.get("state")
-
-    @property
-    def native_unit_of_measurement(self):
-        return self._data.get("unit_of_measurement")
-
-    @property
-    def device_class(self):
-        return self._data.get("device_class")
-
-    @property
-    def state_class(self):
-        return self._data.get("state_class")
-
-    @property
-    def suggested_display_precision(self):
-        return self._data.get("precision")
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    manager: OwlBrainManager = hass.data[DOMAIN]["manager"]
+    manager.entities.register_platform("sensor", async_add_entities)

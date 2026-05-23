@@ -13,4 +13,4 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     manager: OwlBrainManager = hass.data[DOMAIN]["manager"]
-    manager.entities.register_platform("binary_sensor", async_add_entities)
+    manager.entities.register_platform("cover", async_add_entities)

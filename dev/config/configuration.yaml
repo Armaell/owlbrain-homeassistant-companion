@@ -1,0 +1,9 @@
+default_config:
+
+development:
+  reload: always
+
+logger:
+  default: error
+  logs:
+    custom_components.owlbrain: debug
