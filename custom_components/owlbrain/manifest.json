@@ -2,7 +2,7 @@
   "domain": "owlbrain",
   "name": "OwlBrain",
   "documentation": "https://github.com/Armaell/owlbrain-homeassistant-companion",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "requirements": [],
   "codeowners": ["@armaell"],
   "config_flow": true,
