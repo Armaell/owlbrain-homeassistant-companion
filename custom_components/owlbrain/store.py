@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from homeassistant.core import HomeAssistant
@@ -18,6 +19,7 @@ class OwlBrainStore:
 	def __init__(self, hass: HomeAssistant):
 		self.hass = hass
 		self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
+		self._load_lock = asyncio.Lock()
 
 		self._devices: dict[tuple, dict] | None = None
 		self._entities: dict[tuple, dict] | None = None
@@ -26,23 +28,27 @@ class OwlBrainStore:
 		if self._devices is not None and self._entities is not None:
 			return
 
-		data = await self._store.async_load()
+		async with self._load_lock:
+			if self._devices is not None and self._entities is not None:
+				return
 
-		if not data:
-			_LOGGER.debug("No existing OwlBrain storage found")
-			self._devices = {}
-			self._entities = {}
-			return
+			data = await self._store.async_load()
 
-		self._devices = {
-			(dev["namespace"], dev["device_id"]): dev
-			for dev in data.get("devices", [])
-		}
+			if not data:
+				_LOGGER.debug("No existing OwlBrain storage found")
+				self._devices = {}
+				self._entities = {}
+				return
 
-		self._entities = {
-			(ent["namespace"], ent["entity_id"]): ent
-			for ent in data.get("entities", [])
-		}
+			self._devices = {
+				(dev["namespace"], dev["device_id"]): dev
+				for dev in data.get("devices", [])
+			}
+
+			self._entities = {
+				(ent["namespace"], ent["entity_id"]): ent
+				for ent in data.get("entities", [])
+			}
 
 	def sync_get_device(
 		self, namespace: str, device_id: str
@@ -84,14 +90,11 @@ class OwlBrainStore:
 
 	async def save(self) -> None:
 		await self._ensure_loaded()
-		try:
-			data = {
-				"devices": list(self._devices.values()),
-				"entities": list(self._entities.values()),
-			}
-			await self._store.async_save(data)
-		except Exception as err:
-			_LOGGER.exception("Failed to save OwlBrain store: %s", err)
+		data = {
+			"devices": list(self._devices.values()),
+			"entities": list(self._entities.values()),
+		}
+		await self._store.async_save(data)
 
 	async def set_device(self, model: DeviceModel) -> None:
 		await self._ensure_loaded()
@@ -110,7 +113,7 @@ class OwlBrainStore:
 		await self.save()
 
 	def remove_device(self, model: DeviceModel) -> None:
-		del self._devices[(model.namespace, model.device_id)]
+		self._devices.pop((model.namespace, model.device_id), None)
 
 	def remove_entity(self, model: EntityModel) -> None:
-		del self._entities[(model.namespace, model.entity_id)]
+		self._entities.pop((model.namespace, model.entity_id), None)

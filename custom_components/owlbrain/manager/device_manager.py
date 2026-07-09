@@ -21,8 +21,9 @@ class OwlBrainDeviceManager:
 		manager,
 		entity_manager: OwlBrainEntityManager,
 		store: OwlBrainStore,
+		lock: asyncio.Lock | None = None,
 	):
-		self._lock = asyncio.Lock()
+		self._lock = lock or asyncio.Lock()
 		self.manager = manager
 		self.entity_manager = entity_manager
 		self.store = store
@@ -32,77 +33,116 @@ class OwlBrainDeviceManager:
 	) -> DeviceModel:
 		"""Create a device."""
 		async with self._lock:
-			devices = await self.store.get_devices()
+			return await self._create_locked(namespace, device_id, metadata)
 
-			# Check for namespace collision
-			for ns, did in devices:
-				if did == device_id and ns != namespace:
-					raise ValueError(
-						"Device already exists in another namespace"
-					)
+	async def _create_locked(
+		self, namespace: str, device_id: str, metadata: dict
+	) -> DeviceModel:
+		devices = await self.store.get_devices()
 
-			device = DeviceModel(
-				namespace=namespace,
-				device_id=device_id,
-				metadata=metadata,
-				unique_id=build_unique_id_device(namespace, device_id),
-			)
+		# Check for namespace collision
+		for ns, did in devices:
+			if did == device_id and ns != namespace:
+				raise ValueError("Device already exists in another namespace")
 
-			await self.store.save_device(device)
-			_LOGGER.info("Created device %s", device_id)
-			return device
+		device = DeviceModel(
+			namespace=namespace,
+			device_id=device_id,
+			metadata=metadata,
+			unique_id=build_unique_id_device(namespace, device_id),
+		)
+
+		await self.store.save_device(device)
+		_LOGGER.info("Created device %s", device_id)
+		return device
 
 	async def update(
 		self, namespace: str, device_id: str, metadata: dict
 	) -> DeviceModel:
 		"""Update a device by overwriting its metadata."""
 		async with self._lock:
+			return await self._update_locked(namespace, device_id, metadata)
+
+	async def _update_locked(
+		self, namespace: str, device_id: str, metadata: dict
+	) -> DeviceModel:
+		device = await self.store.get_device(namespace, device_id)
+
+		if device is None:
+			raise OwlDeviceNotFoundError(device_id)
+
+		device.metadata = metadata
+
+		await self.store.save_device(device)
+		_LOGGER.debug("Updated device %s's metadata", device_id)
+		return device
+
+	async def upsert(
+		self, namespace: str, device_id: str, metadata: dict
+	) -> tuple[DeviceModel, str]:
+		"""Create the device if it doesn't exist yet, else update it.
+
+		Runs the existence check and the create/update under a single lock
+		acquisition so a concurrent delete can't land between the check and
+		the write.
+		"""
+		async with self._lock:
 			device = await self.store.get_device(namespace, device_id)
-
-			device.metadata = metadata
-
-			await self.store.save_device(device)
-			_LOGGER.debug("Updated device %s's metadata", device_id)
-			return device
+			if device is None:
+				return (
+					await self._create_locked(namespace, device_id, metadata),
+					"created",
+				)
+			return (
+				await self._update_locked(namespace, device_id, metadata),
+				"updated",
+			)
 
 	async def delete(self, namespace: str, device_id: str) -> None:
 		async with self._lock:
-			device = await self.store.get_device(namespace, device_id)
+			await self._delete_locked(namespace, device_id)
 
-			if device is None:
-				raise OwlDeviceNotFoundError(device_id)
+	async def _delete_locked(self, namespace: str, device_id: str) -> None:
+		device = await self.store.get_device(namespace, device_id)
 
-			# Delete all entities belonging to this device
-			entities = await self.store.get_entities()
-			to_delete = [
-				(ns, entity_id)
-				for (ns, entity_id), ent in entities.items()
-				if ent.metadata.get("device_id") == device_id
-				and ent.namespace == namespace
-			]
+		if device is None:
+			raise OwlDeviceNotFoundError(device_id)
 
-			for ns, entity_id in to_delete:
-				await self.entity_manager.remove_entity_from_registries(
-					ns, entity_id
-				)
+		# Delete all entities belonging to this device
+		entities = await self.store.get_entities()
+		to_delete = [
+			(ns, entity_id)
+			for (ns, entity_id), ent in entities.items()
+			if ent.metadata.get("device_id") == device_id
+			and ent.namespace == namespace
+		]
 
-			# Remove device from HA device registry
-			device_registry = dr.async_get(self.manager.hass)
-			entry = device_registry.async_get_device(
-				identifiers={(DOMAIN, device.unique_id)}
+		for ns, entity_id in to_delete:
+			await self.entity_manager._remove_entity_from_registries_locked(
+				ns, entity_id
 			)
 
-			if entry:
-				await device_registry.async_remove_device(entry.id)
+		# Remove device from HA device registry
+		device_registry = dr.async_get(self.manager.hass)
+		entry = device_registry.async_get_device(
+			identifiers={(DOMAIN, device.unique_id)}
+		)
 
-			# Remove from store
-			self.store.remove_device(device)
-			await self.store.save()
+		if entry:
+			await device_registry.async_remove_device(entry.id)
 
-			_LOGGER.debug("Deleted device %s", device_id)
+		# Remove from store
+		self.store.remove_device(device)
+		await self.store.save()
+
+		_LOGGER.debug("Deleted device %s", device_id)
 
 	async def cleanup_empty(self, namespace: str) -> None:
 		"""Delete devices that no longer have any entities."""
+		async with self._lock:
+			await self._cleanup_empty_locked(namespace)
+
+	async def _cleanup_empty_locked(self, namespace: str) -> None:
 		to_delete = []
 
 		devices = await self.store.get_devices()
@@ -122,4 +162,4 @@ class OwlBrainDeviceManager:
 				to_delete.append(dev)
 
 		for dev in to_delete:
-			await self.delete(dev.namespace, dev.device_id)
+			await self._delete_locked(dev.namespace, dev.device_id)

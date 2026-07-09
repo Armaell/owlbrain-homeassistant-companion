@@ -23,8 +23,14 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class OwlBrainEntityManager:
-	def __init__(self, hass: HomeAssistant, manager, store: OwlBrainStore):
-		self._lock = asyncio.Lock()
+	def __init__(
+		self,
+		hass: HomeAssistant,
+		manager,
+		store: OwlBrainStore,
+		lock: asyncio.Lock | None = None,
+	):
+		self._lock = lock or asyncio.Lock()
 		self.hass = hass
 		self.manager = manager
 		self.store = store
@@ -52,83 +58,114 @@ class OwlBrainEntityManager:
 		self, namespace: str, entity_id: str, metadata: dict
 	) -> EntityModel:
 		async with self._lock:
-			domain = entity_id.split(".")[0]
-			entity_cls = DOMAIN_HANDLERS.get(domain)
-			if entity_cls is None:
-				raise OwlUnsupportedDomainError(domain)
+			return await self._create_locked(namespace, entity_id, metadata)
 
-			# Namespace collision check
-			entities = await self.store.get_entities()
-			for ns, eid in entities:
-				if eid == entity_id and ns != namespace:
-					raise ValueError(
-						"Entity already exists in another namespace"
-					)
+	async def _create_locked(
+		self, namespace: str, entity_id: str, metadata: dict
+	) -> EntityModel:
+		domain = entity_id.split(".")[0]
+		entity_cls = DOMAIN_HANDLERS.get(domain)
+		if entity_cls is None:
+			raise OwlUnsupportedDomainError(domain)
 
-			device_id = metadata.get("device_id")
-			if device_id:
-				device = await self.store.get_device(namespace, device_id)
-				if device is None:
-					raise OwlDeviceNotFoundError(device_id)
+		# Namespace collision check
+		entities = await self.store.get_entities()
+		for ns, eid in entities:
+			if eid == entity_id and ns != namespace:
+				raise ValueError("Entity already exists in another namespace")
 
-			validated_metadata = entity_cls.validate_metadata(metadata)
+		device_id = metadata.get("device_id")
+		if device_id:
+			device = await self.store.get_device(namespace, device_id)
+			if device is None:
+				raise OwlDeviceNotFoundError(device_id)
 
-			# Build model
-			model = EntityModel(
-				namespace=namespace,
-				entity_id=entity_id,
-				domain=domain,
-				unique_id=build_unique_id_entity(namespace, entity_id),
-				data={},
-				metadata=validated_metadata,
-			)
+		validated_metadata = entity_cls.validate_metadata(metadata)
 
-			if device_id:
-				model.device_id = device_id
+		# Build model
+		model = EntityModel(
+			namespace=namespace,
+			entity_id=entity_id,
+			domain=domain,
+			unique_id=build_unique_id_entity(namespace, entity_id),
+			data={},
+			metadata=validated_metadata,
+		)
 
-			await self.store.set_entity(model)
-			await self._create_runtime_entity(model)
-			await self.manager.devices.cleanup_empty(namespace)
-			await self.store.save()
+		if device_id:
+			model.device_id = device_id
 
-			_LOGGER.info(f"created entity {entity_id}")
-			return model
+		await self.store.set_entity(model)
+		await self._create_runtime_entity(model)
+		await self.manager.devices._cleanup_empty_locked(namespace)
+		await self.store.save()
+
+		_LOGGER.info(f"created entity {entity_id}")
+		return model
 
 	async def update_metadata(
 		self, namespace: str, entity_id: str, metadata: dict
 	):
 		async with self._lock:
+			return await self._update_metadata_locked(
+				namespace, entity_id, metadata
+			)
+
+	async def _update_metadata_locked(
+		self, namespace: str, entity_id: str, metadata: dict
+	):
+		entity = await self.store.get_entity(namespace, entity_id)
+
+		if entity is None:
+			raise OwlEntityNotFoundError(entity_id)
+
+		device_id = metadata.get("device_id")
+		if device_id:
+			device = await self.store.get_device(namespace, device_id)
+			if device is None:
+				raise OwlDeviceNotFoundError(device_id)
+
+		entity_cls = DOMAIN_HANDLERS.get(entity.domain)
+		validated_metadata = (
+			entity_cls.validate_metadata(metadata)
+			if entity_cls
+			else dict(metadata)
+		)
+
+		entity.metadata = validated_metadata
+		entity.device_id = device_id if device_id else None
+
+		await self.store.save_entity(entity)
+
+		runtime = self.runtime_entities.get(entity.unique_id)
+		if runtime:
+			await runtime.async_update_metadata(validated_metadata)
+
+		_LOGGER.debug(f"updated entity {entity_id}'s metadata with {metadata}")
+		return entity
+
+	async def upsert(
+		self, namespace: str, entity_id: str, metadata: dict
+	) -> tuple[EntityModel, str]:
+		"""Create the entity if it doesn't exist yet, else update its metadata.
+
+		Runs the existence check and the create/update under a single lock
+		acquisition so a concurrent delete can't land between the check and
+		the write.
+		"""
+		async with self._lock:
 			entity = await self.store.get_entity(namespace, entity_id)
-
 			if entity is None:
-				raise OwlEntityNotFoundError(entity_id)
-
-			device_id = metadata.get("device_id")
-			if device_id:
-				device = await self.store.get_device(namespace, device_id)
-				if device is None:
-					raise OwlDeviceNotFoundError(device_id)
-
-			entity_cls = DOMAIN_HANDLERS.get(entity.domain)
-			validated_metadata = (
-				entity_cls.validate_metadata(metadata)
-				if entity_cls
-				else dict(metadata)
+				return (
+					await self._create_locked(namespace, entity_id, metadata),
+					"created",
+				)
+			return (
+				await self._update_metadata_locked(
+					namespace, entity_id, metadata
+				),
+				"updated",
 			)
-
-			entity.metadata = validated_metadata
-			entity.device_id = device_id if device_id else None
-
-			await self.store.save_entity(entity)
-
-			runtime = self.runtime_entities.get(entity.unique_id)
-			if runtime:
-				await runtime.async_update_metadata(validated_metadata)
-
-			_LOGGER.debug(
-				f"updated entity {entity_id}'s metadata with {metadata}"
-			)
-			return entity
 
 	async def update_data(
 		self, namespace: str, entity_id: str, data: dict
@@ -149,8 +186,10 @@ class OwlBrainEntityManager:
 
 	async def delete(self, namespace: str, entity_id: str):
 		async with self._lock:
-			await self.remove_entity_from_registries(namespace, entity_id)
-			await self.manager.devices.cleanup_empty(namespace)
+			await self._remove_entity_from_registries_locked(
+				namespace, entity_id
+			)
+			await self.manager.devices._cleanup_empty_locked(namespace)
 			await self.store.save()
 			_LOGGER.debug("Deleted entity %s", entity_id)
 
@@ -174,6 +213,14 @@ class OwlBrainEntityManager:
 		self, namespace: str, entity_id: str
 	):
 		"""Remove entity from internal and HA registries."""
+		async with self._lock:
+			await self._remove_entity_from_registries_locked(
+				namespace, entity_id
+			)
+
+	async def _remove_entity_from_registries_locked(
+		self, namespace: str, entity_id: str
+	):
 		entity = await self.store.get_entity(namespace, entity_id)
 
 		if entity is None:

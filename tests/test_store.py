@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -108,6 +109,17 @@ async def test_remove_device(store):
 
 
 @pytest.mark.asyncio
+async def test_remove_device_missing_key_is_noop(store):
+	await store._ensure_loaded()
+
+	dev = DeviceModel.from_dict({"namespace": "ns", "device_id": "dev1"})
+
+	# Removing a device that was never stored must not raise.
+	store.remove_device(dev)
+	store.remove_device(dev)
+
+
+@pytest.mark.asyncio
 async def test_remove_entity(store):
 	await store._ensure_loaded()
 
@@ -117,5 +129,34 @@ async def test_remove_entity(store):
 	store.remove_entity(ent)
 	assert ("ns", "ent1") not in store._entities
 
+
+@pytest.mark.asyncio
+async def test_remove_entity_missing_key_is_noop(store):
+	await store._ensure_loaded()
+
+	ent = EntityModel.from_dict({"namespace": "ns", "entity_id": "ent1"})
+
+	# Removing an entity that was never stored must not raise.
+	store.remove_entity(ent)
+	store.remove_entity(ent)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_ensure_loaded_only_loads_once(store):
+	load_calls = 0
+
+	async def slow_load():
+		nonlocal load_calls
+		load_calls += 1
+		await asyncio.sleep(0)
+		return None
+
+	store._store.async_load = AsyncMock(side_effect=slow_load)
+
+	await asyncio.gather(
+		store._ensure_loaded(), store._ensure_loaded(), store._ensure_loaded()
+	)
+
+	assert load_calls == 1
 
 # endregion

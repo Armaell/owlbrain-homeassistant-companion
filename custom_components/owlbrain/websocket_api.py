@@ -119,17 +119,9 @@ async def handle_upsert_device(hass, connection, msg):
 
 	try:
 		namespace, device_id = msg["namespace"], msg["device_id"]
-		device = await manager.store.get_device(namespace, device_id)
-		if device is None:
-			action = "created"
-			device = await manager.devices.create(
-				namespace, device_id, msg["metadata"]
-			)
-		else:
-			action = "updated"
-			device = await manager.devices.update(
-				namespace, device_id, msg["metadata"]
-			)
+		device, action = await manager.devices.upsert(
+			namespace, device_id, msg["metadata"]
+		)
 
 		connection.send_result(
 			msg["id"],
@@ -193,18 +185,9 @@ async def handle_upsert_entity(hass, connection, msg):
 
 	try:
 		namespace, entity_id = msg["namespace"], msg["entity_id"]
-		entity = await manager.store.get_entity(namespace, entity_id)
-
-		if entity is None:
-			action = "created"
-			entity = await manager.entities.create(
-				namespace, entity_id, msg["metadata"]
-			)
-		else:
-			action = "updated"
-			entity = await manager.entities.update_metadata(
-				namespace, entity_id, msg["metadata"]
-			)
+		entity, action = await manager.entities.upsert(
+			namespace, entity_id, msg["metadata"]
+		)
 
 		connection.send_result(
 			msg["id"],

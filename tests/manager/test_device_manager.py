@@ -100,6 +100,56 @@ async def test_update(device_manager, mock_store):
 	mock_store.save_device.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_update_raises_if_not_found(device_manager, mock_store):
+	# Arrange
+	mock_store.get_device.return_value = None
+
+	# Act / Assert
+	with pytest.raises(OwlDeviceNotFoundError):
+		await device_manager.update("ns1", "dev1", {"new": True})
+
+
+# endregion -------------------
+# region UPSERT
+# -----------------------------
+
+
+@pytest.mark.asyncio
+async def test_upsert_creates_when_missing(device_manager, mock_store):
+	# Arrange
+	mock_store.get_devices.return_value = {}
+	mock_store.get_device.return_value = None
+	metadata = {"name": "Lamp"}
+
+	# Act
+	device, action = await device_manager.upsert("ns1", "dev1", metadata)
+
+	# Assert
+	assert action == "created"
+	assert device.metadata == metadata
+
+
+@pytest.mark.asyncio
+async def test_upsert_updates_when_existing(device_manager, mock_store):
+	# Arrange
+	existing = DeviceModel(
+		namespace="ns1",
+		device_id="dev1",
+		metadata={"old": True},
+		unique_id="uid123",
+	)
+	mock_store.get_device.return_value = existing
+	metadata = {"new": True}
+
+	# Act
+	device, action = await device_manager.upsert("ns1", "dev1", metadata)
+
+	# Assert
+	assert action == "updated"
+	assert device.metadata == metadata
+
+
 # endregion -------------------
 # region DELETE
 # -----------------------------
@@ -147,7 +197,10 @@ async def test_delete_removes_entities_and_device(
 		await device_manager.delete("ns1", "dev1")
 
 	# Assert
-	assert mock_entity_manager.remove_entity_from_registries.await_count == 2
+	assert (
+		mock_entity_manager._remove_entity_from_registries_locked.await_count
+		== 2
+	)
 	mock_store.remove_device.assert_called_once_with(device)
 	mock_store.save.assert_awaited_once()
 	mock_registry.async_remove_device.assert_awaited_once_with("reg1")
@@ -179,14 +232,14 @@ async def test_cleanup_empty_deletes_devices_without_entities(
 	mock_registry = MagicMock()
 	mock_registry.async_remove_device = AsyncMock()
 
+	device_manager._delete_locked = AsyncMock()
+
 	with patch.object(dr, "async_get", return_value=mock_registry):
 		# Act
 		await device_manager.cleanup_empty("ns1")
 
 	# Assert
-	device_manager.delete = AsyncMock()
-	await device_manager.cleanup_empty("ns1")
-	device_manager.delete.assert_awaited_once_with("ns1", "d1")
+	device_manager._delete_locked.assert_awaited_once_with("ns1", "d1")
 
 
 @pytest.mark.asyncio

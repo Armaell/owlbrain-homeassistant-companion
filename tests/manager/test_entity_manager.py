@@ -38,6 +38,7 @@ def store():
 def manager():
 	mgr = MagicMock()
 	mgr.devices.cleanup_empty = AsyncMock()
+	mgr.devices._cleanup_empty_locked = AsyncMock()
 	return mgr
 
 
@@ -94,7 +95,7 @@ async def test_create_success(
 	assert model.entity_id == "sensor.temp"
 	assert model.device_id == "dev1"
 	store.set_entity.assert_awaited()
-	manager.devices.cleanup_empty.assert_awaited()
+	manager.devices._cleanup_empty_locked.assert_awaited()
 
 
 @pytest.mark.asyncio
@@ -137,7 +138,7 @@ async def test_create_invalid_metadata_raises_and_does_not_persist(
 
 	store.set_entity.assert_not_awaited()
 	store.save.assert_not_awaited()
-	manager.devices.cleanup_empty.assert_not_awaited()
+	manager.devices._cleanup_empty_locked.assert_not_awaited()
 
 
 # endregion -------------------
@@ -242,6 +243,55 @@ async def test_update_metadata_invalid_metadata_raises_and_does_not_persist(
 
 
 # endregion -------------------
+# region UPSERT
+# -----------------------------
+
+
+@pytest.mark.asyncio
+async def test_upsert_creates_when_missing(
+	entity_manager, store, manager, mock_domain_handlers
+):
+	# Arrange
+	entity_manager.register_platform("sensor", MagicMock())
+	store.get_entities.return_value = {}
+	store.get_entity.return_value = None
+
+	# Act
+	model, action = await entity_manager.upsert("ns", "sensor.temp", {})
+
+	# Assert
+	assert action == "created"
+	assert model.entity_id == "sensor.temp"
+
+
+@pytest.mark.asyncio
+async def test_upsert_updates_when_existing(
+	entity_manager, store, mock_domain_handlers
+):
+	# Arrange
+	entity = EntityModel.from_dict(
+		{
+			"namespace": "ns",
+			"entity_id": "sensor.temp",
+			"domain": "sensor",
+			"unique_id": "uid",
+			"metadata": {},
+			"data": {},
+		}
+	)
+	store.get_entity.return_value = entity
+
+	# Act
+	model, action = await entity_manager.upsert(
+		"ns", "sensor.temp", {"name": "new"}
+	)
+
+	# Assert
+	assert action == "updated"
+	assert model.metadata == {"name": "new"}
+
+
+# endregion -------------------
 # region UPDATE_DATA
 # -----------------------------
 
@@ -291,14 +341,14 @@ async def test_update_data_missing_entity_raises(entity_manager, store):
 @pytest.mark.asyncio
 async def test_delete_calls_cleanup_and_save(entity_manager, store, manager):
 	# Arrange
-	entity_manager.remove_entity_from_registries = AsyncMock()
+	entity_manager._remove_entity_from_registries_locked = AsyncMock()
 
 	# Act
 	await entity_manager.delete("ns", "sensor.temp")
 
 	# Assert
-	entity_manager.remove_entity_from_registries.assert_awaited()
-	manager.devices.cleanup_empty.assert_awaited()
+	entity_manager._remove_entity_from_registries_locked.assert_awaited()
+	manager.devices._cleanup_empty_locked.assert_awaited()
 	store.save.assert_awaited()
 
 
