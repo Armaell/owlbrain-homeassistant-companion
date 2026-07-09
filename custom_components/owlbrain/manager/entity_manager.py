@@ -89,8 +89,7 @@ class OwlBrainEntityManager:
 			raise OwlUnsupportedDomainError(domain)
 
 		# Namespace collision check
-		entities = await self.store.get_entities()
-		for ns, eid in entities:
+		for ns, eid in await self.store.entity_keys():
 			if eid == entity_id and ns != namespace:
 				raise OwlNamespaceCollisionError(entity_id, ns)
 

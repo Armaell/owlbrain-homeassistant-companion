@@ -65,6 +65,10 @@ class OwlBrainStore:
 		raw = self._devices.get((namespace, device_id))
 		return DeviceModel.from_dict(raw) if raw else None
 
+	async def device_keys(self) -> set[tuple[str, str]]:
+		await self._ensure_loaded()
+		return set(self._devices.keys())
+
 	async def get_devices(self, namespace=None) -> dict[tuple, DeviceModel]:
 		await self._ensure_loaded()
 		return {
@@ -79,6 +83,10 @@ class OwlBrainStore:
 		await self._ensure_loaded()
 		raw = self._entities.get((namespace, entity_id))
 		return EntityModel.from_dict(raw) if raw else None
+
+	async def entity_keys(self) -> set[tuple[str, str]]:
+		await self._ensure_loaded()
+		return set(self._entities.keys())
 
 	async def get_entities(self, namespace=None) -> dict[tuple, EntityModel]:
 		await self._ensure_loaded()

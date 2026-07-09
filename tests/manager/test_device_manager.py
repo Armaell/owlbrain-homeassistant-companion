@@ -19,6 +19,8 @@ def mock_store():
 	store = AsyncMock()
 	store.get_devices.return_value = {}
 	store.get_entities.return_value = {}
+	store.device_keys.return_value = set()
+	store.entity_keys.return_value = set()
 	return store
 
 
@@ -68,9 +70,7 @@ async def test_create_new_device(device_manager, mock_store):
 @pytest.mark.asyncio
 async def test_create_raises_on_namespace_collision(device_manager, mock_store):
 	# Arrange
-	mock_store.get_devices.return_value = {
-		("nsX", "dev1"): DeviceModel.from_dict({})
-	}
+	mock_store.device_keys.return_value = {("nsX", "dev1")}
 	mock_store.get_device.return_value = None
 
 	# Act / Assert

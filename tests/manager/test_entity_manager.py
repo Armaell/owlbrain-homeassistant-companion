@@ -26,6 +26,7 @@ def hass():
 def store():
 	store = MagicMock()
 	store.get_entities = AsyncMock(return_value={})
+	store.entity_keys = AsyncMock(return_value=set())
 	store.get_entity = AsyncMock(return_value=None)
 	store.set_entity = AsyncMock()
 	store.save_entity = AsyncMock()
@@ -105,7 +106,7 @@ async def test_create_namespace_collision_raises(
 ):
 	# Arrange
 	entity_manager.register_platform("sensor", MagicMock())
-	store.get_entities.return_value = {("other", "sensor.temp"): {}}
+	store.entity_keys.return_value = {("other", "sensor.temp")}
 
 	# Act / Assert
 	with pytest.raises(OwlNamespaceCollisionError):

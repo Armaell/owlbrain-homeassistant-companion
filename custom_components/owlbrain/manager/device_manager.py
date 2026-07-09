@@ -38,10 +38,8 @@ class OwlBrainDeviceManager:
 	async def _create_locked(
 		self, namespace: str, device_id: str, metadata: dict
 	) -> DeviceModel:
-		devices = await self.store.get_devices()
-
 		# Check for namespace collision
-		for ns, did in devices:
+		for ns, did in await self.store.device_keys():
 			if did == device_id and ns != namespace:
 				raise OwlNamespaceCollisionError(device_id, ns)
 
@@ -109,7 +107,7 @@ class OwlBrainDeviceManager:
 			raise OwlDeviceNotFoundError(device_id)
 
 		# Delete all entities belonging to this device
-		entities = await self.store.get_entities()
+		entities = await self.store.get_entities(namespace)
 		to_delete = [
 			(ns, entity_id)
 			for (ns, entity_id), ent in entities.items()
@@ -143,23 +141,22 @@ class OwlBrainDeviceManager:
 			await self._cleanup_empty_locked(namespace)
 
 	async def _cleanup_empty_locked(self, namespace: str) -> None:
-		to_delete = []
+		devices = await self.store.get_devices(namespace)
+		entities = await self.store.get_entities(namespace)
 
-		devices = await self.store.get_devices()
-		entities = await self.store.get_entities()
+		device_ids_with_entities = {
+			device_id
+			for ent in entities.values()
+			if ent.namespace == namespace
+			and (device_id := ent.metadata.get("device_id"))
+		}
 
-		for (ns, device_id), dev in devices.items():
-			if ns != namespace:
-				continue
-
-			has_entities = any(
-				ent.metadata.get("device_id") == device_id
-				and ent.namespace == namespace
-				for ent in entities.values()
-			)
-
-			if not has_entities:
-				to_delete.append(dev)
+		to_delete = [
+			dev
+			for dev in devices.values()
+			if dev.namespace == namespace
+			and dev.device_id not in device_ids_with_entities
+		]
 
 		for dev in to_delete:
 			await self._delete_locked(dev.namespace, dev.device_id)
