@@ -95,7 +95,7 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 		if "state" in data and ColorMode.ONOFF in supported:
 			return ColorMode.ONOFF
 
-		return None
+		return ColorMode.ONOFF if ColorMode.ONOFF in supported else next(iter(supported))
 
 	async def async_turn_on(self, **kwargs: Any) -> None:
 		payload: Dict[str, Any] = {"state": "on"}
