@@ -235,7 +235,11 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 			]
 
 		if "xy_color" in new_data:
-			x, y = new_data["xy_color"]
+			xy = new_data["xy_color"]
+			if not isinstance(xy, (list, tuple)) or len(xy) != 2:
+				raise OwlInvalidValueError("xy_color", xy, "[x, y]")
+
+			x, y = xy
 			clear_color_modes()
 			updated["xy_color"] = [
 				ensure_in_range("x", float(x), 0, 1),
@@ -244,7 +248,7 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 
 		if "rgb_color" in new_data:
 			rgb = new_data["rgb_color"]
-			if len(rgb) != 3:
+			if not isinstance(rgb, (list, tuple)) or len(rgb) != 3:
 				raise OwlInvalidValueError("rgb_color", rgb, "[r,g,b]")
 			clear_color_modes()
 			updated["rgb_color"] = [
@@ -253,7 +257,7 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 
 		if "rgbw_color" in new_data:
 			rgbw = new_data["rgbw_color"]
-			if len(rgbw) != 4:
+			if not isinstance(rgbw, (list, tuple)) or len(rgbw) != 4:
 				raise OwlInvalidValueError("rgbw_color", rgbw, "[r,g,b,w]")
 			clear_color_modes()
 			updated["rgbw_color"] = [
@@ -262,7 +266,7 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 
 		if "rgbww_color" in new_data:
 			rgbww = new_data["rgbww_color"]
-			if len(rgbww) != 5:
+			if not isinstance(rgbww, (list, tuple)) or len(rgbww) != 5:
 				raise OwlInvalidValueError(
 					"rgbww_color", rgbww, "[r,g,b,cw,ww]"
 				)

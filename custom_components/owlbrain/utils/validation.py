@@ -13,7 +13,7 @@ def ensure_bool(name: str, value):
 
 
 def ensure_int(name: str, value):
-	if isinstance(value, int):
+	if isinstance(value, int) and not isinstance(value, bool):
 		return value
 	raise OwlInvalidValueError(name, value, "integer")
 
@@ -27,7 +27,7 @@ def ensure_in_range(name: str, value: int, min_value: int, max_value: int):
 
 
 def ensure_float(name: str, value):
-	if isinstance(value, (int, float)):
+	if isinstance(value, (int, float)) and not isinstance(value, bool):
 		return float(value)
 	raise OwlInvalidValueError(name, value, "numeric")
 
@@ -54,7 +54,7 @@ def ensure_features_flag(
 	name: str, value: int | Iterable[str], enum_cls: type[IntFlag]
 ) -> int:
 	"""Validate feature flags given as an int bitmask or a list of names."""
-	if isinstance(value, int):
+	if isinstance(value, int) and not isinstance(value, bool):
 		return ensure_int(name, value)
 
 	if isinstance(value, (list, tuple, set)):

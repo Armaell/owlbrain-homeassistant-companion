@@ -95,6 +95,46 @@ async def test_update_data(hass):
 				{"color_temp": 250, "color_mode": ColorMode.COLOR_TEMP},
 			),
 			("color_temp", -1, OwlInvalidValueError, {"color_temp": None}),
+			(
+				"xy_color",
+				[0.3, 0.4],
+				None,
+				{"xy_color": (0.3, 0.4)},
+			),
+			("xy_color", 123, OwlInvalidValueError, {"xy_color": None}),
+			(
+				"xy_color",
+				[0.1, 0.2, 0.3],
+				OwlInvalidValueError,
+				{"xy_color": None},
+			),
+			("rgb_color", 123, OwlInvalidValueError, {"rgb_color": None}),
+			(
+				"rgbw_color",
+				[10, 20, 30, 40],
+				None,
+				{"rgbw_color": (10, 20, 30, 40)},
+			),
+			("rgbw_color", 123, OwlInvalidValueError, {"rgbw_color": None}),
+			(
+				"rgbw_color",
+				[10, 20, 30],
+				OwlInvalidValueError,
+				{"rgbw_color": None},
+			),
+			(
+				"rgbww_color",
+				[10, 20, 30, 40, 50],
+				None,
+				{"rgbww_color": (10, 20, 30, 40, 50)},
+			),
+			("rgbww_color", 123, OwlInvalidValueError, {"rgbww_color": None}),
+			(
+				"rgbww_color",
+				[10, 20, 30, 40],
+				OwlInvalidValueError,
+				{"rgbww_color": None},
+			),
 		]
 	)
 
