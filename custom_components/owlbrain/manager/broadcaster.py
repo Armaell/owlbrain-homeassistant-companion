@@ -34,10 +34,17 @@ class OwlBrainBroadcaster:
 
 	def broadcast(self, namespace: str, message: dict):
 		"""Broadcast a message to all subscribers of a namespace."""
-		subs = self._subs.get(namespace, [])
+		subs = self._subs.get(namespace, set())
 
-		for conn in subs:
-			conn.send_message(message)
+		for conn in list(subs):
+			try:
+				conn.send_message(message)
+			except Exception:
+				logger.exception(
+					"Failed to send message to a subscriber of namespace %s",
+					namespace,
+				)
+				subs.discard(conn)
 
 	async def broadcast_entity_action(
 		self, namespace: str, entity_id: str, action: str, data: dict[str, Any]
