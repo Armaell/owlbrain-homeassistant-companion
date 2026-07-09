@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity import Entity
 
 from ..domain import DOMAIN_HANDLERS
 from ..errors import (
@@ -38,21 +39,39 @@ class OwlBrainEntityManager:
 		# Runtime HA entities (unique_id, entity instance)
 		self.runtime_entities: dict[str, Any] = {}
 
-		# Platform adders (domain, async_add_entities)
-		self.platform_adders: dict[str, AddEntitiesCallback] = {}
+		# Platform adders (domain, platform.async_add_entities) — the real
+		# EntityPlatform coroutine, which only resolves once entities are
+		# fully added to hass (not the fire-and-forget AddEntitiesCallback).
+		self.platform_adders: dict[
+			str, Callable[[list[Entity]], Awaitable[None]]
+		] = {}
 
-	def register_platform(self, domain: str, adder: AddEntitiesCallback):
+	def register_platform(
+		self, domain: str, adder: Callable[[list[Entity]], Awaitable[None]]
+	):
 		"""Called by each platform file (sensor.py, switch.py, etc.)."""
 		self.platform_adders[domain] = adder
 
 	async def restore_runtime_entities(self) -> None:
 		"""Recreate all runtime entities from persisted storage."""
 		entities = await self.store.get_entities()
+		restored = 0
 		async with self._lock:
 			for entity in entities.values():
-				await self._create_runtime_entity(entity)
+				try:
+					await self._create_runtime_entity(entity)
+					restored += 1
+				except Exception as err:
+					_LOGGER.error(
+						"Failed to restore entity %s (domain %s): %s",
+						entity.entity_id,
+						entity.domain,
+						err,
+					)
 
-		_LOGGER.info("OwlBrain restored %s entities", len(entities))
+		_LOGGER.info(
+			"OwlBrain restored %s/%s entities", restored, len(entities)
+		)
 
 	async def create(
 		self, namespace: str, entity_id: str, metadata: dict
@@ -96,7 +115,11 @@ class OwlBrainEntityManager:
 			model.device_id = device_id
 
 		await self.store.set_entity(model)
-		await self._create_runtime_entity(model)
+		try:
+			await self._create_runtime_entity(model)
+		except Exception:
+			self.store.remove_entity(model)
+			raise
 		await self.manager.devices._cleanup_empty_locked(namespace)
 		await self.store.save()
 
@@ -177,10 +200,12 @@ class OwlBrainEntityManager:
 				raise OwlEntityNotFoundError(entity_id)
 
 			runtime = self.runtime_entities.get(entity.unique_id)
-			if runtime:
-				data = await runtime.async_update_data(data)
-				entity.data = data
-				await self.store.save_entity(entity)
+			if runtime is None:
+				raise OwlPlatformNotReadyError(entity.domain)
+
+			data = await runtime.async_update_data(data)
+			entity.data = data
+			await self.store.save_entity(entity)
 
 			return entity
 
@@ -204,10 +229,11 @@ class OwlBrainEntityManager:
 			raise OwlPlatformNotReadyError(domain)
 
 		entity = entity_cls(self.hass, self.manager, model)
-		self.runtime_entities[model.unique_id] = entity
 
-		# Inject into HA
-		self.platform_adders[domain]([entity])
+		# Await full HA registration before considering the entity live, so
+		# no update/refresh can ever observe it half-added.
+		await self.platform_adders[domain]([entity])
+		self.runtime_entities[model.unique_id] = entity
 
 	async def remove_entity_from_registries(
 		self, namespace: str, entity_id: str

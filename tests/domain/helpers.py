@@ -149,10 +149,12 @@ class EntityTestHelper:
 			)
 
 	async def run_platform_registration_test(self, setup_fn):
-		"""Test that async_setup_entry registers the correct platform."""
-		from unittest.mock import AsyncMock, MagicMock
+		"""Test that async_setup_entry registers the real, awaitable
+		EntityPlatform.async_add_entities (not the fire-and-forget
+		AddEntitiesCallback) for the correct domain."""
+		from unittest.mock import AsyncMock, MagicMock, patch
 
-		async_add_entities = AsyncMock()
+		async_add_entities = MagicMock()
 
 		entry = MagicMock()
 
@@ -162,8 +164,15 @@ class EntityTestHelper:
 
 		self.hass.data = {"owlbrain": {"manager": mock_manager}}
 
-		await setup_fn(self.hass, entry, async_add_entities)
+		mock_platform = MagicMock()
+		mock_platform.async_add_entities = AsyncMock()
+
+		with patch(
+			"homeassistant.helpers.entity_platform.async_get_current_platform",
+			return_value=mock_platform,
+		):
+			await setup_fn(self.hass, entry, async_add_entities)
 
 		mock_manager.entities.register_platform.assert_called_once_with(
-			self.domain, async_add_entities
+			self.domain, mock_platform.async_add_entities
 		)

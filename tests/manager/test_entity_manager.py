@@ -83,7 +83,7 @@ async def test_create_success(
 	entity_manager, store, manager, mock_domain_handlers
 ):
 	# Arrange
-	entity_manager.register_platform("sensor", MagicMock())
+	entity_manager.register_platform("sensor", AsyncMock())
 	store.get_entities.return_value = {}
 	metadata = {"device_id": "dev1"}
 
@@ -252,7 +252,7 @@ async def test_upsert_creates_when_missing(
 	entity_manager, store, manager, mock_domain_handlers
 ):
 	# Arrange
-	entity_manager.register_platform("sensor", MagicMock())
+	entity_manager.register_platform("sensor", AsyncMock())
 	store.get_entities.return_value = {}
 	store.get_entity.return_value = None
 
@@ -331,6 +331,30 @@ async def test_update_data_missing_entity_raises(entity_manager, store):
 	# Act / Assert
 	with pytest.raises(OwlEntityNotFoundError):
 		await entity_manager.update_data("ns", "sensor.temp", {})
+
+
+@pytest.mark.asyncio
+async def test_update_data_no_runtime_raises_and_does_not_persist(
+	entity_manager, store
+):
+	# Arrange
+	entity = EntityModel.from_dict(
+		{
+			"namespace": "ns",
+			"entity_id": "sensor.temp",
+			"domain": "sensor",
+			"unique_id": "uid",
+			"metadata": {},
+			"data": {},
+		}
+	)
+	store.get_entity.return_value = entity
+
+	# Act / Assert
+	with pytest.raises(OwlPlatformNotReadyError):
+		await entity_manager.update_data("ns", "sensor.temp", {"a": 1})
+
+	store.save_entity.assert_not_awaited()
 
 
 # endregion -------------------
