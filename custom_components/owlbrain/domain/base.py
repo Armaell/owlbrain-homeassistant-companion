@@ -87,22 +87,38 @@ class OwlBrainBaseEntity(Entity):
 	def entity_picture(self) -> Optional[str]:
 		return self._model.metadata.get("entity_picture")
 
-	async def async_update_metadata(self, metadata: Dict[str, Any]) -> None:
-		self._model.metadata = metadata
-		self.async_write_ha_state()
+	@classmethod
+	def validate_metadata(cls, metadata: Dict[str, Any]) -> Dict[str, Any]:
+		"""Validate and normalize metadata."""
+		return dict(metadata)
 
-
-	async def async_update_data(self, new_data: Dict[str, Any]) -> Dict[str, Any]:
-		updated = dict(self.owl_model.data)
+	@classmethod
+	def validate_data(
+		cls,
+		metadata: Dict[str, Any],
+		current_data: Dict[str, Any],
+		new_data: Dict[str, Any],
+	) -> Dict[str, Any]:
+		"""Validate incoming data and merge it onto `current_data`."""
+		updated = dict(current_data)
 
 		if "available" in new_data:
 			updated["available"] = bool(new_data["available"])
 
-		self.owl_model.data = updated
+		return updated
 
+	async def async_update_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+		normalized = self.validate_metadata(metadata)
+		self._model.metadata = normalized
 		self.async_write_ha_state()
+		return normalized
 
-		return self.owl_model.data
+
+	async def async_update_data(self, new_data: Dict[str, Any]) -> Dict[str, Any]:
+		updated = self.validate_data(self.owl_model.metadata, self.owl_model.data, new_data)
+		self.owl_model.data = updated
+		self.async_write_ha_state()
+		return updated
 
 	@property
 	def owl_model(self) -> EntityModel:

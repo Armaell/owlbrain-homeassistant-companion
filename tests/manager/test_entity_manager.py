@@ -10,6 +10,7 @@ from custom_components.owlbrain.errors import (
     OwlEntityNotFoundError,
     OwlUnsupportedDomainError,
     OwlPlatformNotReadyError,
+    OwlInvalidValueError,
 )
 from custom_components.owlbrain.models.entity import EntityModel
 from custom_components.owlbrain.utils.ids import build_unique_id_entity
@@ -112,6 +113,22 @@ async def test_create_platform_not_ready_raises(entity_manager, store, mock_doma
         await entity_manager.create("ns", "sensor.temp", {})
 
 
+@pytest.mark.asyncio
+async def test_create_invalid_metadata_raises_and_does_not_persist(entity_manager, store, manager):
+    # Arrange
+    entity_manager.register_platform("light", MagicMock())
+    store.get_entities.return_value = {}
+    metadata = {"supported_color_modes": ["invalid"]}
+
+    # Act / Assert
+    with pytest.raises(OwlInvalidValueError):
+        await entity_manager.create("ns", "light.lamp", metadata)
+
+    store.set_entity.assert_not_awaited()
+    store.save.assert_not_awaited()
+    manager.devices.cleanup_empty.assert_not_awaited()
+
+
 # endregion -------------------
 #region UPDATE_METADATA
 # -----------------------------
@@ -169,6 +186,31 @@ async def test_update_metadata_missing_device_raises(entity_manager, store):
     # Act / Assert
     with pytest.raises(OwlDeviceNotFoundError):
         await entity_manager.update_metadata("ns", "sensor.temp", {"device_id": "missing"})
+
+
+@pytest.mark.asyncio
+async def test_update_metadata_invalid_metadata_raises_and_does_not_persist(entity_manager, store):
+    # Arrange
+    entity = EntityModel.from_dict(dict(
+        namespace="ns",
+        entity_id="cover.blind",
+        domain="cover",
+        unique_id="uid",
+        metadata={},
+        data={},
+    ))
+    store.get_entity.return_value = entity
+
+    runtime = MagicMock()
+    runtime.async_update_metadata = AsyncMock()
+    entity_manager.runtime_entities["uid"] = runtime
+
+    # Act / Assert
+    with pytest.raises(OwlInvalidValueError):
+        await entity_manager.update_metadata("ns", "cover.blind", {"supported_features": "not-a-flag"})
+
+    store.save_entity.assert_not_awaited()
+    runtime.async_update_metadata.assert_not_awaited()
 
 
 # endregion -------------------

@@ -44,8 +44,9 @@ class OwlBrainNumberEntity(OwlBrainBaseEntity, NumberEntity):
 	async def async_set_native_value(self, value: float) -> None:
 		await self._broadcast_entity_action("set_state", { "state": value })
 
-	async def async_update_metadata(self, metadata: dict) -> None:
-		"""Validate and overwrite metadata into the entity model.
+	@classmethod
+	def validate_metadata(cls, metadata: dict) -> dict:
+		"""Validate and normalize metadata.
 
 		Accepted keys:
 		- min: float
@@ -56,42 +57,50 @@ class OwlBrainNumberEntity(OwlBrainBaseEntity, NumberEntity):
 		- device_class: str
 		- any other base keys
 		"""
+		normalized = super().validate_metadata(metadata)
 
-		if "min" in metadata:
-			metadata["min"] = ensure_float("min", metadata["min"])
+		if "min" in normalized:
+			normalized["min"] = ensure_float("min", normalized["min"])
 
-		if "max" in metadata:
-			metadata["max"] = ensure_float("max", metadata["max"])
+		if "max" in normalized:
+			normalized["max"] = ensure_float("max", normalized["max"])
 
-		if "step" in metadata:
-			metadata["step"] = ensure_float("step", metadata["step"])
+		if "step" in normalized:
+			normalized["step"] = ensure_float("step", normalized["step"])
 
-		if "mode" in metadata:
-			mode = ensure_str("mode", metadata["mode"])
+		if "mode" in normalized:
+			mode = ensure_str("mode", normalized["mode"])
 			ensure_in_enum("mode", mode, NumberMode)
-			metadata["mode"] = mode
+			normalized["mode"] = mode
 
-		if "unit" in metadata:
-			metadata["unit"] = ensure_str("unit", metadata["unit"])
+		if "unit" in normalized:
+			normalized["unit"] = ensure_str("unit", normalized["unit"])
 
-		if "device_class" in metadata:
-			metadata["device_class"] = ensure_str("device_class", metadata["device_class"])
+		if "device_class" in normalized:
+			normalized["device_class"] = ensure_str("device_class", normalized["device_class"])
 
-		return await super().async_update_metadata(metadata)
+		return normalized
 
-	async def async_update_data(self, new_data: Dict[str, Any]) -> Dict[str, Any]:
-		"""Validate and merge incoming data into the entity model.
+	@classmethod
+	def validate_data(
+		cls,
+		metadata: Dict[str, Any],
+		current_data: Dict[str, Any],
+		new_data: Dict[str, Any],
+	) -> Dict[str, Any]:
+		"""Validate and merge incoming data.
 
         Accepted keys:
 		- state: float
 		- available: bool
 		"""
-		updated = dict(self.owl_model.data)
+		updated = dict(current_data)
 
 		if "state" in new_data:
 			v = ensure_float("state", new_data["state"])
-			ensure_in_range("state", v, self.native_min_value, self.native_max_value)
+			native_min = float(metadata.get("min", 0))
+			native_max = float(metadata.get("max", 100))
+			ensure_in_range("state", v, native_min, native_max)
 			updated["state"] = v
 
-		self.owl_model.data = updated
-		return await super().async_update_data(new_data)
+		return super().validate_data(metadata, updated, new_data)

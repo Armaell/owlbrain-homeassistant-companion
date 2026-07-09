@@ -30,8 +30,9 @@ class OwlBrainSensorEntity(OwlBrainBaseEntity, SensorEntity):
 	def state_class(self) -> Optional[str]:
 		return self.owl_model.metadata.get("state_class")
 
-	async def async_update_metadata(self, metadata: dict) -> None:
-		"""Validate and overwrite metadata into the entity model.
+	@classmethod
+	def validate_metadata(cls, metadata: dict) -> dict:
+		"""Validate and normalize metadata.
 
 		Accepted keys:
 		- unit: str
@@ -39,32 +40,39 @@ class OwlBrainSensorEntity(OwlBrainBaseEntity, SensorEntity):
 		- state_class: str
 		- any other base keys
 		"""
-		if "unit" in metadata:
-			u = ensure_str("unit", metadata["unit"])
-			metadata["unit"] = u
+		normalized = super().validate_metadata(metadata)
 
-		if "device_class" in metadata:
-			dc = ensure_in_enum("device_class", metadata["device_class"], SensorDeviceClass)
-			metadata["device_class"] = dc
+		if "unit" in normalized:
+			normalized["unit"] = ensure_str("unit", normalized["unit"])
 
-		if "state_class" in metadata:
-			sc = ensure_in_enum("state_class", metadata["state_class"], SensorStateClass)
-			metadata["state_class"] = sc
+		if "device_class" in normalized:
+			normalized["device_class"] = ensure_in_enum(
+				"device_class", normalized["device_class"], SensorDeviceClass
+			)
 
-		return await super().async_update_metadata(metadata)
+		if "state_class" in normalized:
+			normalized["state_class"] = ensure_in_enum(
+				"state_class", normalized["state_class"], SensorStateClass
+			)
 
+		return normalized
 
-	async def async_update_data(self, new_data: Dict[str, Any]) -> Dict[str, Any]:
-		"""Validate and merge incoming data into the entity model.
+	@classmethod
+	def validate_data(
+		cls,
+		metadata: Dict[str, Any],
+		current_data: Dict[str, Any],
+		new_data: Dict[str, Any],
+	) -> Dict[str, Any]:
+		"""Validate and merge incoming data.
 
 		Accepted keys:
 		- state: any
 		- available: bool
 		"""
-		updated = dict(self.owl_model.data)
+		updated = dict(current_data)
 
 		if "state" in new_data:
 			updated["state"] = new_data["state"]
 
-		self.owl_model.data = updated
-		return await super().async_update_data(new_data)
+		return super().validate_data(metadata, updated, new_data)

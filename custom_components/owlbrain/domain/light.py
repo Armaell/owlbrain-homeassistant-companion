@@ -17,6 +17,10 @@ from ..errors import OwlInvalidValueError
 class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 	"""Virtual OwlBrain Light."""
 
+	def __init__(self, hass, manager, model) -> None:
+		super().__init__(hass, manager, model)
+		self._supported_color_modes = self._compute_supported_color_modes(model.metadata)
+
 	# --------------------------
 	# Basic state properties
 	# --------------------------
@@ -63,10 +67,14 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 	def white(self):
 		return self.owl_model.data.get("white")
 
+	@staticmethod
+	def _compute_supported_color_modes(metadata: Dict[str, Any]) -> set[ColorMode]:
+		raw_modes = metadata.get("supported_color_modes", ["onoff"])
+		return {ColorMode(mode) for mode in raw_modes}
+
 	@property
 	def supported_color_modes(self) -> set[ColorMode]:
-		raw_modes = self.owl_model.metadata.get("supported_color_modes", ["onoff"])
-		return {ColorMode(mode) for mode in raw_modes}
+		return self._supported_color_modes
 
 	@property
 	def color_mode(self) -> ColorMode:
@@ -121,26 +129,40 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 	async def async_turn_off(self, **kwargs: Any) -> None:
 		await self._broadcast_entity_action("turn_off", {"state": "off"})
 
-	async def async_update_metadata(self, metadata: Dict[str, Any]) -> None:
-		"""Validate and overwrite metadata into the entity model.
+	async def async_update_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+		normalized = await super().async_update_metadata(metadata)
+		self._supported_color_modes = self._compute_supported_color_modes(normalized)
+		return normalized
+
+	@classmethod
+	def validate_metadata(cls, metadata: Dict[str, Any]) -> Dict[str, Any]:
+		"""Validate and normalize metadata.
 
 		Accepted keys:
 		- supported_color_modes: list[str] of "onoff" | "brightness" | "color_temp" | "rgb" | "rgbw" | "rgbww" | "hs" | "xy" | "white"
 		- any other base keys
 		"""
-		if "supported_color_modes" in metadata:
+		normalized = super().validate_metadata(metadata)
+
+		if "supported_color_modes" in normalized:
 			validated_modes = []
-			for mode in metadata["supported_color_modes"]:
+			for mode in normalized["supported_color_modes"]:
 				mode_str = ensure_str("supported_color_modes", mode).lower()
 				ensure_in_enum("supported_color_modes", mode_str, ColorMode)
 				validated_modes.append(mode_str)
 
-			metadata["supported_color_modes"] = validated_modes
+			normalized["supported_color_modes"] = validated_modes
 
-		return await super().async_update_metadata(metadata)
+		return normalized
 
-	async def async_update_data(self, new_data: Dict[str, Any]) -> Dict[str, Any]:
-		"""Validate and merge incoming data into the entity model.
+	@classmethod
+	def validate_data(
+		cls,
+		metadata: Dict[str, Any],
+		current_data: Dict[str, Any],
+		new_data: Dict[str, Any],
+	) -> Dict[str, Any]:
+		"""Validate and merge incoming data.
 
 		Accepted keys:
 		- state: "on" | "off"
@@ -150,7 +172,7 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 		- hs_color: [h, s]
 		- available: bool
 		"""
-		updated = dict(self.owl_model.data)
+		updated = dict(current_data)
 
 		def clear_color_modes():
 			for key in (
@@ -234,5 +256,4 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 				255,
 			)
 
-		self.owl_model.data = updated
-		return await super().async_update_data(new_data)
+		return super().validate_data(metadata, updated, new_data)

@@ -50,7 +50,8 @@ class OwlBrainEntityManager:
 	async def create(self, namespace: str, entity_id: str, metadata: dict) -> EntityModel:
 		async with self._lock:
 			domain = entity_id.split(".")[0]
-			if domain not in DOMAIN_HANDLERS:
+			entity_cls = DOMAIN_HANDLERS.get(domain)
+			if entity_cls is None:
 				raise OwlUnsupportedDomainError(domain)
 
 			# Namespace collision check
@@ -59,6 +60,14 @@ class OwlBrainEntityManager:
 				if eid == entity_id and ns != namespace:
 					raise ValueError("Entity already exists in another namespace")
 
+			device_id = metadata.get("device_id")
+			if device_id:
+				device = await self.store.get_device(namespace, device_id)
+				if device is None:
+					raise OwlDeviceNotFoundError(device_id)
+
+			validated_metadata = entity_cls.validate_metadata(metadata)
+
 			# Build model
 			model = EntityModel(
 				namespace=namespace,
@@ -66,15 +75,10 @@ class OwlBrainEntityManager:
 				domain=domain,
 				unique_id=build_unique_id_entity(namespace, entity_id),
 				data={},
-				metadata=metadata,
+				metadata=validated_metadata,
 			)
 
-			# Device association
-			device_id = metadata.get("device_id")
 			if device_id:
-				device = await self.store.get_device(namespace, device_id)
-				if device is None:
-					raise OwlDeviceNotFoundError(device_id)
 				model.device_id = device_id
 
 			await self.store.set_entity(model)
@@ -92,23 +96,25 @@ class OwlBrainEntityManager:
 			if entity is None:
 				raise OwlEntityNotFoundError(entity_id)
 
-			entity.metadata = metadata
-
-			# Device association
 			device_id = metadata.get("device_id")
 			if device_id:
 				device = await self.store.get_device(namespace, device_id)
 				if device is None:
 					raise OwlDeviceNotFoundError(device_id)
-				entity.device_id = device_id
-			else:
-				entity.device_id = None
+
+			entity_cls = DOMAIN_HANDLERS.get(entity.domain)
+			validated_metadata = (
+				entity_cls.validate_metadata(metadata) if entity_cls else dict(metadata)
+			)
+
+			entity.metadata = validated_metadata
+			entity.device_id = device_id if device_id else None
 
 			await self.store.save_entity(entity)
 
 			runtime = self.runtime_entities.get(entity.unique_id)
 			if runtime:
-				await runtime.async_update_metadata(metadata)
+				await runtime.async_update_metadata(validated_metadata)
 
 			_LOGGER.debug(f"updated entity {entity_id}'s metadata with {metadata}")
 			return entity

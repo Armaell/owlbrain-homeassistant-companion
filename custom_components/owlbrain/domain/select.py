@@ -22,35 +22,42 @@ class OwlBrainSelectEntity(OwlBrainBaseEntity, SelectEntity):
 	async def async_select_option(self, option: str) -> None:
 		await self._broadcast_entity_action("select", { "state": option })
 
-	async def async_update_metadata(self, metadata: dict) -> None:
-		"""Validate and overwrite metadata into the entity model.
+	@classmethod
+	def validate_metadata(cls, metadata: dict) -> dict:
+		"""Validate and normalize metadata.
 
 		Accepted keys:
 		- options: string array
 		- any other base keys
 		"""
+		normalized = super().validate_metadata(metadata)
 
-		if "options" in metadata:
-			if not isinstance(metadata["options"], list):
-				raise OwlInvalidValueError("options", metadata["options"], "list of strings")
-			if not all(isinstance(v, str) for v in metadata["options"]):
-				raise OwlInvalidValueError("options", metadata["options"], "list of strings")
+		if "options" in normalized:
+			if not isinstance(normalized["options"], list):
+				raise OwlInvalidValueError("options", normalized["options"], "list of strings")
+			if not all(isinstance(v, str) for v in normalized["options"]):
+				raise OwlInvalidValueError("options", normalized["options"], "list of strings")
 
-		return await super().async_update_metadata(metadata)
+		return normalized
 
-	async def async_update_data(self, new_data: Dict[str, Any]) -> Dict[str, Any]:
-		"""Validate and merge incoming data into the entity model.
+	@classmethod
+	def validate_data(
+		cls,
+		metadata: Dict[str, Any],
+		current_data: Dict[str, Any],
+		new_data: Dict[str, Any],
+	) -> Dict[str, Any]:
+		"""Validate and merge incoming data.
 
 		Accepted keys:
 		- state: a value from options
 		- available: bool
 		"""
-		updated = dict(self.owl_model.data)
+		updated = dict(current_data)
 
 		if "state" in new_data:
 			option = ensure_str("state", new_data["state"])
-			ensure_in_list("state", option, self.options)
+			ensure_in_list("state", option, metadata.get("options", []))
 			updated["state"] = option
 
-		self.owl_model.data = updated
-		return await super().async_update_data(new_data)
+		return super().validate_data(metadata, updated, new_data)

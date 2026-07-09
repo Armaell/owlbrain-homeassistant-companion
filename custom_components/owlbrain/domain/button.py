@@ -17,15 +17,16 @@ class OwlBrainButtonEntity(OwlBrainBaseEntity, ButtonEntity):
 	async def async_press(self) -> None:
 		await self._broadcast_entity_action("press", None)
 
-	async def async_update_metadata(self, metadata: dict) -> None:
-		"""Validate and overwrite metadata into the entity model.
+	@classmethod
+	def validate_metadata(cls, metadata: dict) -> dict:
+		"""Validate and normalize metadata.
 
 		Accepted keys:
 		- device_class: str
 		"""
+		normalized = super().validate_metadata(metadata)
 
-		if "device_class" in metadata:
-			dc = ensure_str("device_class", metadata["device_class"])
-			metadata["device_class"] = dc
+		if "device_class" in normalized:
+			normalized["device_class"] = ensure_str("device_class", normalized["device_class"])
 
-		return await super().async_update_metadata(metadata)
+		return normalized

@@ -21,33 +21,39 @@ class OwlBrainBinarySensorEntity(OwlBrainBaseEntity, BinarySensorEntity):
 		return self.owl_model.metadata.get("device_class")
 
 
-	async def async_update_metadata(self, metadata: dict) -> None:
-		"""Validate and overwrite metadata into the entity model.
+	@classmethod
+	def validate_metadata(cls, metadata: dict) -> dict:
+		"""Validate and normalize metadata.
 
 		Accepted keys:
 		- device_class: str
 		- any other base keys
 		"""
+		normalized = super().validate_metadata(metadata)
 
-		if "device_class" in metadata:
-			dc = ensure_str("device_class", metadata["device_class"])
-			metadata["device_class"] = dc
+		if "device_class" in normalized:
+			normalized["device_class"] = ensure_str("device_class", normalized["device_class"])
 
-		return await super().async_update_metadata(metadata)
+		return normalized
 
-	async def async_update_data(self, new_data: Dict[str, Any]) -> Dict[str, Any]:
-		"""Validate and merge incoming data into the entity model.
+	@classmethod
+	def validate_data(
+		cls,
+		metadata: Dict[str, Any],
+		current_data: Dict[str, Any],
+		new_data: Dict[str, Any],
+	) -> Dict[str, Any]:
+		"""Validate and merge incoming data.
 
 		Accepted keys:
 		- state: "on" | "off"
 		- available: bool
 		"""
-		updated = dict(self.owl_model.data)
+		updated = dict(current_data)
 
 		if "state" in new_data:
 			state = ensure_str("state", new_data["state"])
 			ensure_in_list("state", state, {"on", "off"})
 			updated["state"] = state
 
-		self.owl_model.data = updated
-		return await super().async_update_data(new_data)
+		return super().validate_data(metadata, updated, new_data)
