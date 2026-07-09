@@ -16,7 +16,7 @@ class OwlBrainSensorEntity(OwlBrainBaseEntity, SensorEntity):
 
 	@property
 	def native_value(self) -> Any:
-		return self.owl_model.data.get("value")
+		return self.owl_model.data.get("state")
 
 	@property
 	def native_unit_of_measurement(self) -> Optional[str]:
@@ -58,13 +58,13 @@ class OwlBrainSensorEntity(OwlBrainBaseEntity, SensorEntity):
 		"""Validate and merge incoming data into the entity model.
 
 		Accepted keys:
-		- value: any
+		- state: any
 		- available: bool
 		"""
 		updated = dict(self.owl_model.data)
 
-		if "value" in new_data:
-			updated["value"] = new_data["value"]
+		if "state" in new_data:
+			updated["state"] = new_data["state"]
 
 		self.owl_model.data = updated
 		return await super().async_update_data(new_data)

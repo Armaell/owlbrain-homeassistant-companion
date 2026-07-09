@@ -60,7 +60,7 @@ async def test_update_data(hass):
 	await helper.run_data_matrix(
 		[
 			(
-				"value",
+				"state",
 				"on",
 				None,
 				{"native_value": "on"},
