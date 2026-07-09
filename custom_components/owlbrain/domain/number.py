@@ -15,8 +15,9 @@ from .base import OwlBrainBaseEntity
 
 class OwlBrainNumberEntity(OwlBrainBaseEntity, NumberEntity):
 	@property
-	def native_value(self) -> float:
-		return float(self.owl_model.data.get("state", self.native_min_value))
+	def native_value(self) -> float | None:
+		state = self.owl_model.data.get("state")
+		return self.native_min_value if state is None else float(state)
 
 	@property
 	def native_min_value(self) -> float:
