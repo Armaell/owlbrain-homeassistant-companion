@@ -13,8 +13,6 @@ from .websocket_api import async_register_websocket_api
 
 _LOGGER = logging.getLogger(__name__)
 
-DOMAIN = DOMAIN
-
 
 async def async_setup(hass: HomeAssistant, config: ConfigType):
 	return True

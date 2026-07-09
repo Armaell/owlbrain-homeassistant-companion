@@ -94,7 +94,7 @@ async def test_create_success(
 	# Assert
 	assert model.namespace == "ns"
 	assert model.entity_id == "sensor.temp"
-	assert model.device_id == "dev1"
+	assert model.metadata["device_id"] == "dev1"
 	store.set_entity.assert_awaited()
 	manager.devices._cleanup_empty_locked.assert_awaited()
 
@@ -175,7 +175,7 @@ async def test_update_metadata_success(
 	)
 
 	# Assert
-	assert model.device_id == "dev1"
+	assert model.metadata["device_id"] == "dev1"
 	runtime.async_update_metadata.assert_awaited()
 
 

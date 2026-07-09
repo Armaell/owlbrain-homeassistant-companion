@@ -112,9 +112,6 @@ class OwlBrainEntityManager:
 			metadata=validated_metadata,
 		)
 
-		if device_id:
-			model.device_id = device_id
-
 		await self.store.set_entity(model)
 		try:
 			await self._create_runtime_entity(model)
@@ -157,7 +154,6 @@ class OwlBrainEntityManager:
 		)
 
 		entity.metadata = validated_metadata
-		entity.device_id = device_id if device_id else None
 
 		await self.store.save_entity(entity)
 
