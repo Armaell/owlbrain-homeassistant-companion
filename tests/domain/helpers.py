@@ -1,8 +1,9 @@
 from __future__ import annotations
-from typing import Any, Dict, Optional, Tuple, Type
-import pytest
 
+from typing import Any
 from unittest.mock import AsyncMock
+
+import pytest
 
 from custom_components.owlbrain.models.entity import EntityModel
 
@@ -10,17 +11,17 @@ from custom_components.owlbrain.models.entity import EntityModel
 class EntityTestHelper:
 	def __init__(
 		self,
-		entity_cls: Type,
+		entity_cls: type,
 		manager=None,
 		hass=None,
-		metadata={},
-		domain="test"
+		metadata=None,
+		domain="test",
 	):
 		self.entity_cls = entity_cls
 		self.namespace = "test"
 		self.domain = domain
 		self.unique_id = "1234"
-		self.initial_metadata = metadata
+		self.initial_metadata = metadata if metadata is not None else {}
 		self.manager = manager
 		self.hass = hass
 
@@ -31,21 +32,20 @@ class EntityTestHelper:
 			domain=self.domain,
 			unique_id=self.unique_id,
 			entity_id="test.entity",
-			metadata=self.initial_metadata
+			metadata=self.initial_metadata,
 		)
 		entity = self.entity_cls(self.hass, self.manager, model)
 		entity.async_write_ha_state = lambda *args, **kwargs: None
 		return entity
 
-
 	async def run_metadata_matrix(
 		self,
 		matrix: list[
 			tuple[
-				str,                       # key name
-				Any,                       # value to apply
-				Optional[Type[Exception]], # expected exception
-				Dict[str, Any]             # expected reflected properties
+				str,  # key name
+				Any,  # value to apply
+				type[Exception] | None,  # expected exception
+				dict[str, Any],  # expected reflected properties
 			]
 		],
 	):
@@ -63,17 +63,19 @@ class EntityTestHelper:
 			# Validate metadata reflection
 			for prop, expected in expected_props.items():
 				actual = getattr(entity, prop)
-				assert actual == expected, f"when metadata {key} is {value}, property {prop} was expected to be {expected}, but got {actual}"
-
+				assert actual == expected, (
+					f"when metadata {key} is {value}, property {prop} was "
+					f"expected to be {expected}, but got {actual}"
+				)
 
 	async def run_data_matrix(
 		self,
 		matrix: list[
 			tuple[
-				str,                       # key name
-				Any,                       # value to apply
-				Optional[Type[Exception]], # expected exception
-				Dict[str, Any]             # expected reflected properties
+				str,  # key name
+				Any,  # value to apply
+				type[Exception] | None,  # expected exception
+				dict[str, Any],  # expected reflected properties
 			]
 		],
 	):
@@ -90,17 +92,19 @@ class EntityTestHelper:
 			# Validate reflected properties
 			for prop, expected in expected_props.items():
 				actual = getattr(entity, prop)
-				assert actual == expected, f"when data {key} is {value}, property {prop} was expected to be {expected}, but got {actual}"
-
+				assert actual == expected, (
+					f"when data {key} is {value}, property {prop} was "
+					f"expected to be {expected}, but got {actual}"
+				)
 
 	async def run_action_matrix(
 		self,
 		matrix: list[
 			tuple[
-				str,   # entity method name (e.g. "async_turn_on")
-				Any,   # args: dict for kwargs OR tuple/list for positional args
-				str,   # expected broadcast action name
-				Any    # expected broadcast data
+				str,  # entity method name (e.g. "async_turn_on")
+				Any,  # args: dict for kwargs OR tuple/list for positional args
+				str,  # expected broadcast action name
+				Any,  # expected broadcast data
 			]
 		],
 	):
@@ -108,11 +112,17 @@ class EntityTestHelper:
 			entity = self.create_entity()
 
 			mock_broadcaster = AsyncMock()
-			mock_manager = type("MockManager", (), {
-				"broadcaster": type("MockBroadcaster", (), {
-					"broadcast_entity_action": mock_broadcaster
-				})()
-			})()
+			mock_manager = type(
+				"MockManager",
+				(),
+				{
+					"broadcaster": type(
+						"MockBroadcaster",
+						(),
+						{"broadcast_entity_action": mock_broadcaster},
+					)()
+				},
+			)()
 
 			entity._manager = mock_manager
 
@@ -131,19 +141,14 @@ class EntityTestHelper:
 				# single positional argument
 				await method(args)
 
-
 			mock_broadcaster.assert_awaited_once_with(
 				entity.owl_namespace,
 				entity.owl_entity_id,
 				expected_action,
-				expected_data
+				expected_data,
 			)
 
-
-	async def run_platform_registration_test(
-		self,
-		setup_fn,
-	):
+	async def run_platform_registration_test(self, setup_fn):
 		"""Test that async_setup_entry registers the correct platform."""
 		from unittest.mock import AsyncMock, MagicMock
 
@@ -155,15 +160,10 @@ class EntityTestHelper:
 		mock_manager.entities = MagicMock()
 		mock_manager.entities.register_platform = MagicMock()
 
-		self.hass.data = {
-			"owlbrain": {
-				"manager": mock_manager
-			}
-		}
+		self.hass.data = {"owlbrain": {"manager": mock_manager}}
 
 		await setup_fn(self.hass, entry, async_add_entities)
 
 		mock_manager.entities.register_platform.assert_called_once_with(
-			self.domain,
-			async_add_entities
+			self.domain, async_add_entities
 		)

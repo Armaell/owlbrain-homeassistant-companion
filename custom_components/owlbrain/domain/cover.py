@@ -1,21 +1,22 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
-from homeassistant.components.cover import (
-    CoverEntity,
-    CoverEntityFeature
+from homeassistant.components.cover import CoverEntity, CoverEntityFeature
+
+from ..utils.validation import (
+	ensure_features_flag,
+	ensure_in_list,
+	ensure_in_range,
+	ensure_int,
+	ensure_str,
 )
-
-
 from .base import OwlBrainBaseEntity
-from ..utils.validation import ensure_int, ensure_str, ensure_in_range, ensure_features_flag, ensure_in_list
 
 
 class OwlBrainCoverEntity(OwlBrainBaseEntity, CoverEntity):
-
 	@property
-	def state(self) -> Optional[str]:
+	def state(self) -> str | None:
 		return self.owl_model.data.get("state")
 
 	@property
@@ -23,46 +24,34 @@ class OwlBrainCoverEntity(OwlBrainBaseEntity, CoverEntity):
 		return self.owl_model.metadata.get("supported_features", 3)
 
 	@property
-	def is_closed(self) -> Optional[bool]:
+	def is_closed(self) -> bool | None:
 		state = self.owl_model.data.get("state")
 		if state is None:
 			return None
-		if state == "closed":
-			return True
-		return False
+		return state == "closed"
 
 	@property
-	def current_cover_position(self) -> Optional[int]:
+	def current_cover_position(self) -> int | None:
 		return self.owl_model.data.get("position")
 
 	@property
-	def current_cover_tilt_position(self) -> Optional[int]:
+	def current_cover_tilt_position(self) -> int | None:
 		return self.owl_model.data.get("tilt_position")
 
 	async def async_open_cover(self, **kwargs: Any) -> None:
-		await self._broadcast_entity_action(
-			"open", None
-		)
+		await self._broadcast_entity_action("open", None)
 
 	async def async_open_cover_tilt(self, **kwargs: Any) -> None:
-		await self._broadcast_entity_action(
-			"open_tilt", None
-		)
+		await self._broadcast_entity_action("open_tilt", None)
 
 	async def async_stop_cover(self, **kwargs: Any) -> None:
-		await self._broadcast_entity_action(
-			"stop", None
-		)
+		await self._broadcast_entity_action("stop", None)
 
 	async def async_close_cover(self, **kwargs: Any) -> None:
-		await self._broadcast_entity_action(
-			"close", None
-		)
+		await self._broadcast_entity_action("close", None)
 
 	async def async_close_cover_tilt(self, **kwargs: Any) -> None:
-		await self._broadcast_entity_action(
-			"close_tilt", None
-		)
+		await self._broadcast_entity_action("close_tilt", None)
 
 	async def async_set_cover_position(self, **kwargs: Any) -> None:
 		position = kwargs.get("position")
@@ -98,10 +87,10 @@ class OwlBrainCoverEntity(OwlBrainBaseEntity, CoverEntity):
 	@classmethod
 	def validate_data(
 		cls,
-		metadata: Dict[str, Any],
-		current_data: Dict[str, Any],
-		new_data: Dict[str, Any],
-	) -> Dict[str, Any]:
+		metadata: dict[str, Any],
+		current_data: dict[str, Any],
+		new_data: dict[str, Any],
+	) -> dict[str, Any]:
 		"""Validate and merge incoming data.
 
 		Accepted keys:
@@ -109,12 +98,14 @@ class OwlBrainCoverEntity(OwlBrainBaseEntity, CoverEntity):
 		- position: 0-100
 		- tilt_position: 0-100
 		- available: bool
-        """
+		"""
 		updated = dict(current_data)
 
 		if "state" in new_data:
 			state = ensure_str("state", new_data["state"])
-			ensure_in_list("state", state, {"open", "closed", "opening", "closing"})
+			ensure_in_list(
+				"state", state, {"open", "closed", "opening", "closing"}
+			)
 			updated["state"] = state
 
 		if "position" in new_data:

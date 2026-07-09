@@ -1,17 +1,19 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
-from homeassistant.components.number import (
-	NumberEntity,
-	NumberMode,
+from homeassistant.components.number import NumberEntity, NumberMode
+
+from ..utils.validation import (
+	ensure_float,
+	ensure_in_enum,
+	ensure_in_range,
+	ensure_str,
 )
-
 from .base import OwlBrainBaseEntity
-from ..utils.validation import ensure_float, ensure_str, ensure_in_range, ensure_in_enum
+
 
 class OwlBrainNumberEntity(OwlBrainBaseEntity, NumberEntity):
-
 	@property
 	def native_value(self) -> float:
 		return float(self.owl_model.data.get("state", self.native_min_value))
@@ -34,15 +36,15 @@ class OwlBrainNumberEntity(OwlBrainBaseEntity, NumberEntity):
 		return NumberMode(mode)
 
 	@property
-	def unit_of_measurement(self) -> Optional[str]:
+	def unit_of_measurement(self) -> str | None:
 		return self.owl_model.metadata.get("unit")
 
 	@property
-	def device_class(self) -> Optional[str]:
+	def device_class(self) -> str | None:
 		return self.owl_model.metadata.get("device_class")
 
 	async def async_set_native_value(self, value: float) -> None:
-		await self._broadcast_entity_action("set_state", { "state": value })
+		await self._broadcast_entity_action("set_state", {"state": value})
 
 	@classmethod
 	def validate_metadata(cls, metadata: dict) -> dict:
@@ -77,22 +79,24 @@ class OwlBrainNumberEntity(OwlBrainBaseEntity, NumberEntity):
 			normalized["unit"] = ensure_str("unit", normalized["unit"])
 
 		if "device_class" in normalized:
-			normalized["device_class"] = ensure_str("device_class", normalized["device_class"])
+			normalized["device_class"] = ensure_str(
+				"device_class", normalized["device_class"]
+			)
 
 		return normalized
 
 	@classmethod
 	def validate_data(
 		cls,
-		metadata: Dict[str, Any],
-		current_data: Dict[str, Any],
-		new_data: Dict[str, Any],
-	) -> Dict[str, Any]:
+		metadata: dict[str, Any],
+		current_data: dict[str, Any],
+		new_data: dict[str, Any],
+	) -> dict[str, Any]:
 		"""Validate and merge incoming data.
 
-        Accepted keys:
-		- state: float
-		- available: bool
+		Accepted keys:
+		        - state: float
+		        - available: bool
 		"""
 		updated = dict(current_data)
 

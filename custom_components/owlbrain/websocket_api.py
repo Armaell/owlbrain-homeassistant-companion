@@ -4,8 +4,8 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 
 from .const import DOMAIN, WS_MESSAGE_VERSION
-from .manager import OwlBrainManager
 from .errors import OwlError
+from .manager import OwlBrainManager
 
 
 def async_register_websocket_api(hass: HomeAssistant, manager: OwlBrainManager):
@@ -24,82 +24,84 @@ def async_register_websocket_api(hass: HomeAssistant, manager: OwlBrainManager):
 	websocket_api.async_register_command(hass, handle_update_entity)
 	websocket_api.async_register_command(hass, handle_delete_entity)
 
-@websocket_api.websocket_command({
-	"type": "owlbrain/version"
-})
+
+@websocket_api.websocket_command({"type": "owlbrain/version"})
 @websocket_api.async_response
 async def handle_get_version(hass, connection, msg):
-    connection.send_result(msg["id"], {"version": WS_MESSAGE_VERSION})
+	connection.send_result(msg["id"], {"version": WS_MESSAGE_VERSION})
 
-@websocket_api.websocket_command({
-	"type": "owlbrain/subscribe",
-	"namespace": str,
-})
+
+@websocket_api.websocket_command(
+	{"type": "owlbrain/subscribe", "namespace": str}
+)
 @callback
 def handle_subscribe(hass, connection, msg):
-	"""
-	Enable this connection to receive `owlbrain_entity_action` messages.
-	Those are sent when a user interact with an entity created by this component.
+	"""Enable this connection to receive `owlbrain_entity_action` messages.
 
-	Client will only receive events on entity created with the same namespace.
+	Those are sent when a user interacts with an entity created by this
+	component. Client will only receive events on entities created with
+	the same namespace.
 
-	This also mark this connection as active. Until the subscription, all entities will be marked as unavailable.
+	This also marks this connection as active. Until the subscription,
+	all entities will be marked as unavailable.
 	"""
 	namespace = msg["namespace"]
 	manager: OwlBrainManager = hass.data[DOMAIN]["manager"]
 	manager.broadcaster.add(namespace, connection)
 
-	connection.subscriptions[msg["id"]] = lambda: manager.broadcaster.remove(namespace, connection)
+	connection.subscriptions[msg["id"]] = lambda: manager.broadcaster.remove(
+		namespace, connection
+	)
 
 	connection.send_result(msg["id"], {"version": WS_MESSAGE_VERSION})
 
 
-@websocket_api.websocket_command({
-	"type": "owlbrain/unsubscribe",
-	"namespace": str,
-})
+@websocket_api.websocket_command(
+	{"type": "owlbrain/unsubscribe", "namespace": str}
+)
 @callback
 def handle_unsubscribe(hass, connection, msg):
-	"""
-	Prevent this connection to receive any more `owlbrain_entity_action` messages for the given namespace.
+	"""Stop this connection from receiving `owlbrain_entity_action` messages.
 
-	Also mark all entities as unavailable.
+	Scoped to the given namespace. Also marks all its entities unavailable.
 	"""
 	manager: OwlBrainManager = hass.data[DOMAIN]["manager"]
 	manager.broadcaster.remove(msg["namespace"], connection)
 
 	connection.send_result(msg["id"], {"version": WS_MESSAGE_VERSION})
 
-@websocket_api.websocket_command({
-	"type": "owlbrain/list_devices",
-	"namespace": str,
-	"entity_id": str,
-})
+
+@websocket_api.websocket_command(
+	{"type": "owlbrain/list_devices", "namespace": str, "entity_id": str}
+)
 @websocket_api.async_response
 async def handle_list_devices(hass, connection, msg):
 	manager: OwlBrainManager = hass.data[DOMAIN]["manager"]
 
 	try:
-		devices = await manager.store.get_devices(
-			msg["namespace"],
+		devices = await manager.store.get_devices(msg["namespace"])
+		ids = [key[1] for key in devices]
+		connection.send_result(
+			msg["id"], {"version": WS_MESSAGE_VERSION, "devices": ids}
 		)
-		ids = [key[1] for key in devices.keys()]
-		connection.send_result(msg["id"], {"version": WS_MESSAGE_VERSION, "devices": ids})
 
 	except OwlError as err:
 		connection.send_error(msg["id"], err.code, err.message)
 	except Exception as err:
 		connection.send_error(msg["id"], "list_device_failed", str(err))
 
-@websocket_api.websocket_command({
-	"type": "owlbrain/upsert_device",
-	"namespace": str,
-	"device_id": str,
-	"metadata": dict,
-})
+
+@websocket_api.websocket_command(
+	{
+		"type": "owlbrain/upsert_device",
+		"namespace": str,
+		"device_id": str,
+		"metadata": dict,
+	}
+)
 @websocket_api.async_response
 async def handle_upsert_device(hass, connection, msg):
-	"""Create a device if needed, then overwrite its metadata
+	"""Create a device if needed, then overwrite its metadata.
 
 	Available metadata fields:
 	- connections
@@ -120,29 +122,35 @@ async def handle_upsert_device(hass, connection, msg):
 		device = await manager.store.get_device(namespace, device_id)
 		if device is None:
 			action = "created"
-			device = await manager.devices.create(namespace, device_id, msg["metadata"])
+			device = await manager.devices.create(
+				namespace, device_id, msg["metadata"]
+			)
 		else:
 			action = "updated"
-			device = await manager.devices.update(namespace, device_id, msg["metadata"])
+			device = await manager.devices.update(
+				namespace, device_id, msg["metadata"]
+			)
 
-		connection.send_result(msg["id"], {"version": WS_MESSAGE_VERSION, "device": device, "action": action})
+		connection.send_result(
+			msg["id"],
+			{"version": WS_MESSAGE_VERSION, "device": device, "action": action},
+		)
 
 	except OwlError as err:
 		connection.send_error(msg["id"], err.code, err.message)
 	except Exception as err:
 		connection.send_error(msg["id"], "internal_error", str(err))
 
-@websocket_api.websocket_command({
-	"type": "owlbrain/delete_device",
-	"namespace": str,
-	"device_id": str,
-})
+
+@websocket_api.websocket_command(
+	{"type": "owlbrain/delete_device", "namespace": str, "device_id": str}
+)
 @websocket_api.async_response
 async def handle_delete_device(hass, connection, msg):
 	manager: OwlBrainManager = hass.data[DOMAIN]["manager"]
 
 	try:
-		await manager.devices.delete(msg["namespace"],msg["device_id"],)
+		await manager.devices.delete(msg["namespace"], msg["device_id"])
 		connection.send_result(msg["id"], {"version": WS_MESSAGE_VERSION})
 
 	except OwlError as err:
@@ -150,33 +158,35 @@ async def handle_delete_device(hass, connection, msg):
 	except Exception as err:
 		connection.send_error(msg["id"], "internal_error", str(err))
 
-@websocket_api.websocket_command({
-	"type": "owlbrain/list_entities",
-	"namespace": str,
-	"entity_id": str,
-})
+
+@websocket_api.websocket_command(
+	{"type": "owlbrain/list_entities", "namespace": str, "entity_id": str}
+)
 @websocket_api.async_response
 async def handle_list_entities(hass, connection, msg):
 	manager: OwlBrainManager = hass.data[DOMAIN]["manager"]
 
 	try:
-		entities = await manager.store.get_entities(
-			msg["namespace"],
+		entities = await manager.store.get_entities(msg["namespace"])
+		ids = [key[1] for key in entities]
+		connection.send_result(
+			msg["id"], {"version": WS_MESSAGE_VERSION, "entities": ids}
 		)
-		ids = [key[1] for key in entities.keys()]
-		connection.send_result(msg["id"], {"version": WS_MESSAGE_VERSION, "entities": ids})
 
 	except OwlError as err:
 		connection.send_error(msg["id"], err.code, err.message)
 	except Exception as err:
 		connection.send_error(msg["id"], "list_entities_failed", str(err))
 
-@websocket_api.websocket_command({
-	"type": "owlbrain/upsert_entity",
-	"namespace": str,
-	"entity_id": str,
-	"metadata": dict,
-})
+
+@websocket_api.websocket_command(
+	{
+		"type": "owlbrain/upsert_entity",
+		"namespace": str,
+		"entity_id": str,
+		"metadata": dict,
+	}
+)
 @websocket_api.async_response
 async def handle_upsert_entity(hass, connection, msg):
 	manager: OwlBrainManager = hass.data[DOMAIN]["manager"]
@@ -187,27 +197,37 @@ async def handle_upsert_entity(hass, connection, msg):
 
 		if entity is None:
 			action = "created"
-			entity = await manager.entities.create(namespace, entity_id, msg["metadata"])
+			entity = await manager.entities.create(
+				namespace, entity_id, msg["metadata"]
+			)
 		else:
 			action = "updated"
-			entity = await manager.entities.update_metadata(namespace, entity_id, msg["metadata"])
+			entity = await manager.entities.update_metadata(
+				namespace, entity_id, msg["metadata"]
+			)
 
-		connection.send_result(msg["id"], {"version": WS_MESSAGE_VERSION, "entity": entity, "action": action})
+		connection.send_result(
+			msg["id"],
+			{"version": WS_MESSAGE_VERSION, "entity": entity, "action": action},
+		)
 
 	except OwlError as err:
 		connection.send_error(msg["id"], err.code, err.message)
 	except Exception as err:
 		connection.send_error(msg["id"], "upsert_entity_failed", str(err))
 
-@websocket_api.websocket_command({
-	"type": "owlbrain/update_entity",
-	"namespace": str,
-	"entity_id": str,
-	"data": dict,
-})
+
+@websocket_api.websocket_command(
+	{
+		"type": "owlbrain/update_entity",
+		"namespace": str,
+		"entity_id": str,
+		"data": dict,
+	}
+)
 @websocket_api.async_response
 async def handle_update_entity(hass, connection, msg):
-	"""Create a entity if needed, then overwrite its metadata
+	"""Create an entity if needed, then overwrite its metadata.
 
 	Generic metadata fields:
 	- name
@@ -222,31 +242,27 @@ async def handle_update_entity(hass, connection, msg):
 
 	try:
 		res = await manager.entities.update_data(
-			msg["namespace"],
-			msg["entity_id"],
-			msg["data"],
+			msg["namespace"], msg["entity_id"], msg["data"]
 		)
-		connection.send_result(msg["id"], {"version": WS_MESSAGE_VERSION, "result": res})
+		connection.send_result(
+			msg["id"], {"version": WS_MESSAGE_VERSION, "result": res}
+		)
 
 	except OwlError as err:
 		connection.send_error(msg["id"], err.code, err.message)
 	except Exception as err:
 		connection.send_error(msg["id"], "update_entity_failed", str(err))
 
-@websocket_api.websocket_command({
-	"type": "owlbrain/delete_entity",
-	"namespace": str,
-	"entity_id": str,
-})
+
+@websocket_api.websocket_command(
+	{"type": "owlbrain/delete_entity", "namespace": str, "entity_id": str}
+)
 @websocket_api.async_response
 async def handle_delete_entity(hass, connection, msg):
 	manager: OwlBrainManager = hass.data[DOMAIN]["manager"]
 
 	try:
-		await manager.entities.delete(
-			msg["namespace"],
-			msg["entity_id"],
-		)
+		await manager.entities.delete(msg["namespace"], msg["entity_id"])
 		connection.send_result(msg["id"], {"version": WS_MESSAGE_VERSION})
 
 	except OwlError as err:

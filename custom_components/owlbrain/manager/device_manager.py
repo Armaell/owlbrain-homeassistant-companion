@@ -5,31 +5,41 @@ import logging
 
 from homeassistant.helpers import device_registry as dr
 
-from ..errors import OwlDeviceNotFoundError
-from ..store import OwlBrainStore
-from .entity_manager import OwlBrainEntityManager
-from ..utils.ids import build_unique_id_device
 from ..const import DOMAIN
+from ..errors import OwlDeviceNotFoundError
 from ..models.device import DeviceModel
+from ..store import OwlBrainStore
+from ..utils.ids import build_unique_id_device
+from .entity_manager import OwlBrainEntityManager
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class OwlBrainDeviceManager:
-	def __init__(self, manager, entity_manager: OwlBrainEntityManager, store: OwlBrainStore):
+	def __init__(
+		self,
+		manager,
+		entity_manager: OwlBrainEntityManager,
+		store: OwlBrainStore,
+	):
 		self._lock = asyncio.Lock()
 		self.manager = manager
 		self.entity_manager = entity_manager
 		self.store = store
 
-	async def create(self, namespace: str, device_id: str, metadata: dict) -> DeviceModel:
-		"""Create a device"""
+	async def create(
+		self, namespace: str, device_id: str, metadata: dict
+	) -> DeviceModel:
+		"""Create a device."""
 		async with self._lock:
 			devices = await self.store.get_devices()
 
 			# Check for namespace collision
-			for (ns, did) in devices.keys():
+			for ns, did in devices:
 				if did == device_id and ns != namespace:
-					raise ValueError("Device already exists in another namespace")
+					raise ValueError(
+						"Device already exists in another namespace"
+					)
 
 			device = DeviceModel(
 				namespace=namespace,
@@ -42,8 +52,10 @@ class OwlBrainDeviceManager:
 			_LOGGER.info("Created device %s", device_id)
 			return device
 
-	async def update(self, namespace: str, device_id: str, metadata: dict) -> DeviceModel:
-		"""Update a device by overwriting its metadata"""
+	async def update(
+		self, namespace: str, device_id: str, metadata: dict
+	) -> DeviceModel:
+		"""Update a device by overwriting its metadata."""
 		async with self._lock:
 			device = await self.store.get_device(namespace, device_id)
 
@@ -65,11 +77,14 @@ class OwlBrainDeviceManager:
 			to_delete = [
 				(ns, entity_id)
 				for (ns, entity_id), ent in entities.items()
-				if ent.metadata.get("device_id") == device_id and ent.namespace == namespace
+				if ent.metadata.get("device_id") == device_id
+				and ent.namespace == namespace
 			]
 
 			for ns, entity_id in to_delete:
-				await self.entity_manager.remove_entity_from_registries(ns, entity_id)
+				await self.entity_manager.remove_entity_from_registries(
+					ns, entity_id
+				)
 
 			# Remove device from HA device registry
 			device_registry = dr.async_get(self.manager.hass)
@@ -86,8 +101,6 @@ class OwlBrainDeviceManager:
 
 			_LOGGER.debug("Deleted device %s", device_id)
 
-
-
 	async def cleanup_empty(self, namespace: str) -> None:
 		"""Delete devices that no longer have any entities."""
 		to_delete = []
@@ -100,7 +113,8 @@ class OwlBrainDeviceManager:
 				continue
 
 			has_entities = any(
-				ent.metadata.get("device_id") == device_id and ent.namespace == namespace
+				ent.metadata.get("device_id") == device_id
+				and ent.namespace == namespace
 				for ent in entities.values()
 			)
 

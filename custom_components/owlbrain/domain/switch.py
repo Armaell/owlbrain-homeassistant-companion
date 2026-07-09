@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
 
+from ..utils.validation import ensure_in_list, ensure_str
 from .base import OwlBrainBaseEntity
-from ..utils.validation import ensure_str, ensure_in_list
+
 
 class OwlBrainSwitchEntity(OwlBrainBaseEntity, SwitchEntity):
-
 	@property
-	def is_on(self) -> Optional[bool]:
+	def is_on(self) -> bool | None:
 		state = self.owl_model.data.get("state")
 		if state is None:
 			return None
@@ -37,17 +37,19 @@ class OwlBrainSwitchEntity(OwlBrainBaseEntity, SwitchEntity):
 		normalized = super().validate_metadata(metadata)
 
 		if "device_class" in normalized:
-			normalized["device_class"] = ensure_str("device_class", normalized["device_class"])
+			normalized["device_class"] = ensure_str(
+				"device_class", normalized["device_class"]
+			)
 
 		return normalized
 
 	@classmethod
 	def validate_data(
 		cls,
-		metadata: Dict[str, Any],
-		current_data: Dict[str, Any],
-		new_data: Dict[str, Any],
-	) -> Dict[str, Any]:
+		metadata: dict[str, Any],
+		current_data: dict[str, Any],
+		new_data: dict[str, Any],
+	) -> dict[str, Any]:
 		"""Validate and merge incoming data.
 
 		Accepted keys:

@@ -8,12 +8,12 @@ from .sensor import OwlBrainSensorEntity
 from .switch import OwlBrainSwitchEntity
 
 DOMAIN_HANDLERS = {
-    "binary_sensor": OwlBrainBinarySensorEntity,
-    "button": OwlBrainButtonEntity,
-    "cover": OwlBrainCoverEntity,
-    "light": OwlBrainLightEntity,
-    "number": OwlBrainNumberEntity,
-    "select": OwlBrainSelectEntity,
-    "sensor": OwlBrainSensorEntity,
-    "switch": OwlBrainSwitchEntity,
+	"binary_sensor": OwlBrainBinarySensorEntity,
+	"button": OwlBrainButtonEntity,
+	"cover": OwlBrainCoverEntity,
+	"light": OwlBrainLightEntity,
+	"number": OwlBrainNumberEntity,
+	"select": OwlBrainSelectEntity,
+	"sensor": OwlBrainSensorEntity,
+	"switch": OwlBrainSwitchEntity,
 }

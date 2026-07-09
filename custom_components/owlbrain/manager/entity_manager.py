@@ -8,18 +8,19 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from ..store import OwlBrainStore
+from ..domain import DOMAIN_HANDLERS
 from ..errors import (
 	OwlDeviceNotFoundError,
 	OwlEntityNotFoundError,
+	OwlPlatformNotReadyError,
 	OwlUnsupportedDomainError,
-	OwlPlatformNotReadyError
 )
-from ..domain import DOMAIN_HANDLERS
 from ..models.entity import EntityModel
+from ..store import OwlBrainStore
 from ..utils.ids import build_unique_id_entity
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class OwlBrainEntityManager:
 	def __init__(self, hass: HomeAssistant, manager, store: OwlBrainStore):
@@ -42,12 +43,14 @@ class OwlBrainEntityManager:
 		"""Recreate all runtime entities from persisted storage."""
 		entities = await self.store.get_entities()
 		async with self._lock:
-			for key, entity in entities.items():
+			for entity in entities.values():
 				await self._create_runtime_entity(entity)
 
 		_LOGGER.info("OwlBrain restored %s entities", len(entities))
 
-	async def create(self, namespace: str, entity_id: str, metadata: dict) -> EntityModel:
+	async def create(
+		self, namespace: str, entity_id: str, metadata: dict
+	) -> EntityModel:
 		async with self._lock:
 			domain = entity_id.split(".")[0]
 			entity_cls = DOMAIN_HANDLERS.get(domain)
@@ -56,9 +59,11 @@ class OwlBrainEntityManager:
 
 			# Namespace collision check
 			entities = await self.store.get_entities()
-			for (ns, eid) in entities.keys():
+			for ns, eid in entities:
 				if eid == entity_id and ns != namespace:
-					raise ValueError("Entity already exists in another namespace")
+					raise ValueError(
+						"Entity already exists in another namespace"
+					)
 
 			device_id = metadata.get("device_id")
 			if device_id:
@@ -89,7 +94,9 @@ class OwlBrainEntityManager:
 			_LOGGER.info(f"created entity {entity_id}")
 			return model
 
-	async def update_metadata(self, namespace: str, entity_id: str, metadata: dict):
+	async def update_metadata(
+		self, namespace: str, entity_id: str, metadata: dict
+	):
 		async with self._lock:
 			entity = await self.store.get_entity(namespace, entity_id)
 
@@ -104,7 +111,9 @@ class OwlBrainEntityManager:
 
 			entity_cls = DOMAIN_HANDLERS.get(entity.domain)
 			validated_metadata = (
-				entity_cls.validate_metadata(metadata) if entity_cls else dict(metadata)
+				entity_cls.validate_metadata(metadata)
+				if entity_cls
+				else dict(metadata)
 			)
 
 			entity.metadata = validated_metadata
@@ -116,10 +125,14 @@ class OwlBrainEntityManager:
 			if runtime:
 				await runtime.async_update_metadata(validated_metadata)
 
-			_LOGGER.debug(f"updated entity {entity_id}'s metadata with {metadata}")
+			_LOGGER.debug(
+				f"updated entity {entity_id}'s metadata with {metadata}"
+			)
 			return entity
 
-	async def update_data(self, namespace: str, entity_id: str, data: dict) -> EntityModel:
+	async def update_data(
+		self, namespace: str, entity_id: str, data: dict
+	) -> EntityModel:
 		async with self._lock:
 			entity = await self.store.get_entity(namespace, entity_id)
 
@@ -133,7 +146,6 @@ class OwlBrainEntityManager:
 				await self.store.save_entity(entity)
 
 			return entity
-
 
 	async def delete(self, namespace: str, entity_id: str):
 		async with self._lock:
@@ -158,9 +170,10 @@ class OwlBrainEntityManager:
 		# Inject into HA
 		self.platform_adders[domain]([entity])
 
-
-	async def remove_entity_from_registries(self, namespace: str, entity_id: str):
-		"""Remove entity from internal and HA registries"""
+	async def remove_entity_from_registries(
+		self, namespace: str, entity_id: str
+	):
+		"""Remove entity from internal and HA registries."""
 		entity = await self.store.get_entity(namespace, entity_id)
 
 		if entity is None:
@@ -169,7 +182,9 @@ class OwlBrainEntityManager:
 		unique_id = entity.unique_id
 
 		entity_registry = er.async_get(self.hass)
-		entry = entity_registry.async_get_entity_id(entity.domain, "owlbrain", unique_id)
+		entry = entity_registry.async_get_entity_id(
+			entity.domain, "owlbrain", unique_id
+		)
 
 		if entry:
 			entity_registry.async_remove(entry)

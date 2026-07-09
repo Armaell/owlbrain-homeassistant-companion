@@ -1,33 +1,32 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from homeassistant.components.sensor import (
-	SensorEntity,
 	SensorDeviceClass,
-	SensorStateClass
+	SensorEntity,
+	SensorStateClass,
 )
 
+from ..utils.validation import ensure_in_enum, ensure_str
 from .base import OwlBrainBaseEntity
-from ..utils.validation import ensure_str, ensure_in_enum
 
 
 class OwlBrainSensorEntity(OwlBrainBaseEntity, SensorEntity):
-
 	@property
 	def native_value(self) -> Any:
 		return self.owl_model.data.get("state")
 
 	@property
-	def native_unit_of_measurement(self) -> Optional[str]:
+	def native_unit_of_measurement(self) -> str | None:
 		return self.owl_model.metadata.get("unit")
 
 	@property
-	def device_class(self) -> Optional[str]:
+	def device_class(self) -> str | None:
 		return self.owl_model.metadata.get("device_class")
 
 	@property
-	def state_class(self) -> Optional[str]:
+	def state_class(self) -> str | None:
 		return self.owl_model.metadata.get("state_class")
 
 	@classmethod
@@ -60,10 +59,10 @@ class OwlBrainSensorEntity(OwlBrainBaseEntity, SensorEntity):
 	@classmethod
 	def validate_data(
 		cls,
-		metadata: Dict[str, Any],
-		current_data: Dict[str, Any],
-		new_data: Dict[str, Any],
-	) -> Dict[str, Any]:
+		metadata: dict[str, Any],
+		current_data: dict[str, Any],
+		new_data: dict[str, Any],
+	) -> dict[str, Any]:
 		"""Validate and merge incoming data.
 
 		Accepted keys:

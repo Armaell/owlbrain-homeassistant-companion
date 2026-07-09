@@ -1,41 +1,44 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
-from homeassistant.components.light import LightEntity, ColorMode
+from homeassistant.components.light import ColorMode, LightEntity
 
-from .base import OwlBrainBaseEntity
+from ..errors import OwlInvalidValueError
 from ..utils.validation import (
-	ensure_int,
-	ensure_str,
+	ensure_in_enum,
 	ensure_in_list,
 	ensure_in_range,
-	ensure_in_enum,
+	ensure_int,
+	ensure_str,
 )
-from ..errors import OwlInvalidValueError
+from .base import OwlBrainBaseEntity
+
 
 class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 	"""Virtual OwlBrain Light."""
 
 	def __init__(self, hass, manager, model) -> None:
 		super().__init__(hass, manager, model)
-		self._supported_color_modes = self._compute_supported_color_modes(model.metadata)
+		self._supported_color_modes = self._compute_supported_color_modes(
+			model.metadata
+		)
 
 	# --------------------------
 	# Basic state properties
 	# --------------------------
 
 	@property
-	def is_on(self) -> Optional[bool]:
+	def is_on(self) -> bool | None:
 		state = self.owl_model.data.get("state")
 		return None if state is None else state == "on"
 
 	@property
-	def brightness(self) -> Optional[int]:
+	def brightness(self) -> int | None:
 		return self.owl_model.data.get("brightness")
 
 	@property
-	def color_temp(self) -> Optional[int]:
+	def color_temp(self) -> int | None:
 		return self.owl_model.data.get("color_temp")
 
 	@property
@@ -68,7 +71,9 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 		return self.owl_model.data.get("white")
 
 	@staticmethod
-	def _compute_supported_color_modes(metadata: Dict[str, Any]) -> set[ColorMode]:
+	def _compute_supported_color_modes(
+		metadata: dict[str, Any],
+	) -> set[ColorMode]:
 		raw_modes = metadata.get("supported_color_modes", ["onoff"])
 		return {ColorMode(mode) for mode in raw_modes}
 
@@ -103,10 +108,14 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 		if "state" in data and ColorMode.ONOFF in supported:
 			return ColorMode.ONOFF
 
-		return ColorMode.ONOFF if ColorMode.ONOFF in supported else next(iter(supported))
+		return (
+			ColorMode.ONOFF
+			if ColorMode.ONOFF in supported
+			else next(iter(supported))
+		)
 
 	async def async_turn_on(self, **kwargs: Any) -> None:
-		payload: Dict[str, Any] = {"state": "on"}
+		payload: dict[str, Any] = {"state": "on"}
 
 		color_keys = [
 			"brightness",
@@ -122,24 +131,31 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 		for key in color_keys:
 			if key in kwargs:
 				value = kwargs[key]
-				payload[key] = list(value) if isinstance(value, tuple) else value
+				payload[key] = (
+					list(value) if isinstance(value, tuple) else value
+				)
 
 		await self._broadcast_entity_action("turn_on", payload)
 
 	async def async_turn_off(self, **kwargs: Any) -> None:
 		await self._broadcast_entity_action("turn_off", {"state": "off"})
 
-	async def async_update_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+	async def async_update_metadata(
+		self, metadata: dict[str, Any]
+	) -> dict[str, Any]:
 		normalized = await super().async_update_metadata(metadata)
-		self._supported_color_modes = self._compute_supported_color_modes(normalized)
+		self._supported_color_modes = self._compute_supported_color_modes(
+			normalized
+		)
 		return normalized
 
 	@classmethod
-	def validate_metadata(cls, metadata: Dict[str, Any]) -> Dict[str, Any]:
+	def validate_metadata(cls, metadata: dict[str, Any]) -> dict[str, Any]:
 		"""Validate and normalize metadata.
 
 		Accepted keys:
-		- supported_color_modes: list[str] of "onoff" | "brightness" | "color_temp" | "rgb" | "rgbw" | "rgbww" | "hs" | "xy" | "white"
+		- supported_color_modes: list[str] of "onoff" | "brightness" |
+		  "color_temp" | "rgb" | "rgbw" | "rgbww" | "hs" | "xy" | "white"
 		- any other base keys
 		"""
 		normalized = super().validate_metadata(metadata)
@@ -158,10 +174,10 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 	@classmethod
 	def validate_data(
 		cls,
-		metadata: Dict[str, Any],
-		current_data: Dict[str, Any],
-		new_data: Dict[str, Any],
-	) -> Dict[str, Any]:
+		metadata: dict[str, Any],
+		current_data: dict[str, Any],
+		new_data: dict[str, Any],
+	) -> dict[str, Any]:
 		"""Validate and merge incoming data.
 
 		Accepted keys:
@@ -231,29 +247,34 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 			if len(rgb) != 3:
 				raise OwlInvalidValueError("rgb_color", rgb, "[r,g,b]")
 			clear_color_modes()
-			updated["rgb_color"] = [ensure_in_range("rgb", int(c), 0, 255) for c in rgb]
+			updated["rgb_color"] = [
+				ensure_in_range("rgb", int(c), 0, 255) for c in rgb
+			]
 
 		if "rgbw_color" in new_data:
 			rgbw = new_data["rgbw_color"]
 			if len(rgbw) != 4:
 				raise OwlInvalidValueError("rgbw_color", rgbw, "[r,g,b,w]")
 			clear_color_modes()
-			updated["rgbw_color"] = [ensure_in_range("rgbw", int(c), 0, 255) for c in rgbw]
+			updated["rgbw_color"] = [
+				ensure_in_range("rgbw", int(c), 0, 255) for c in rgbw
+			]
 
 		if "rgbww_color" in new_data:
 			rgbww = new_data["rgbww_color"]
 			if len(rgbww) != 5:
-				raise OwlInvalidValueError("rgbww_color", rgbww, "[r,g,b,cw,ww]")
+				raise OwlInvalidValueError(
+					"rgbww_color", rgbww, "[r,g,b,cw,ww]"
+				)
 			clear_color_modes()
-			updated["rgbww_color"] = [ensure_in_range("rgbww", int(c), 0, 255) for c in rgbww]
+			updated["rgbww_color"] = [
+				ensure_in_range("rgbww", int(c), 0, 255) for c in rgbww
+			]
 
 		if "white" in new_data:
 			clear_color_modes()
 			updated["white"] = ensure_in_range(
-				"white",
-				ensure_int("white", new_data["white"]),
-				0,
-				255,
+				"white", ensure_int("white", new_data["white"]), 0, 255
 			)
 
 		return super().validate_data(metadata, updated, new_data)

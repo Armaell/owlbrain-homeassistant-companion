@@ -8,7 +8,7 @@ PLATFORMS = [
 	"button",
 	"cover",
 	"light",
-    "number",
+	"number",
 	"select",
 	"sensor",
 	"switch",

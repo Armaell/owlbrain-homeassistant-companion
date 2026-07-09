@@ -2,19 +2,16 @@ from __future__ import annotations
 
 from homeassistant.core import HomeAssistant
 
+from ..store import OwlBrainStore
 from .broadcaster import OwlBrainBroadcaster
 from .device_manager import OwlBrainDeviceManager
 from .entity_manager import OwlBrainEntityManager
 
-from ..store import OwlBrainStore
-
 
 class OwlBrainManager:
-	"""
-	Central orchestrator
-	"""
+	"""Central orchestrator."""
 
-	def __init__(self, hass: HomeAssistant,	store: OwlBrainStore):
+	def __init__(self, hass: HomeAssistant, store: OwlBrainStore):
 		self.hass = hass
 		self.store = store
 
