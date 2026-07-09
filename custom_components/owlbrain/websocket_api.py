@@ -46,7 +46,10 @@ def handle_subscribe(hass, connection, msg):
 	all entities will be marked as unavailable.
 	"""
 	namespace = msg["namespace"]
-	manager: OwlBrainManager = hass.data[DOMAIN]["manager"]
+	manager: OwlBrainManager | None = hass.data.get(DOMAIN, {}).get("manager")
+	if manager is None:
+		connection.send_error(msg["id"], "not_loaded", "OwlBrain is not loaded")
+		return
 	manager.broadcaster.add(namespace, connection)
 
 	connection.subscriptions[msg["id"]] = lambda: manager.broadcaster.remove(
@@ -65,14 +68,17 @@ def handle_unsubscribe(hass, connection, msg):
 
 	Scoped to the given namespace. Also marks all its entities unavailable.
 	"""
-	manager: OwlBrainManager = hass.data[DOMAIN]["manager"]
+	manager: OwlBrainManager | None = hass.data.get(DOMAIN, {}).get("manager")
+	if manager is None:
+		connection.send_error(msg["id"], "not_loaded", "OwlBrain is not loaded")
+		return
 	manager.broadcaster.remove(msg["namespace"], connection)
 
 	connection.send_result(msg["id"], {"version": WS_MESSAGE_VERSION})
 
 
 @websocket_api.websocket_command(
-	{"type": "owlbrain/list_devices", "namespace": str, "entity_id": str}
+	{"type": "owlbrain/list_devices", "namespace": str}
 )
 @websocket_api.async_response
 async def handle_list_devices(hass, connection, msg):
@@ -125,7 +131,11 @@ async def handle_upsert_device(hass, connection, msg):
 
 		connection.send_result(
 			msg["id"],
-			{"version": WS_MESSAGE_VERSION, "device": device, "action": action},
+			{
+				"version": WS_MESSAGE_VERSION,
+				"device": device.to_dict(),
+				"action": action,
+			},
 		)
 
 	except OwlError as err:
@@ -152,7 +162,7 @@ async def handle_delete_device(hass, connection, msg):
 
 
 @websocket_api.websocket_command(
-	{"type": "owlbrain/list_entities", "namespace": str, "entity_id": str}
+	{"type": "owlbrain/list_entities", "namespace": str}
 )
 @websocket_api.async_response
 async def handle_list_entities(hass, connection, msg):
@@ -191,7 +201,11 @@ async def handle_upsert_entity(hass, connection, msg):
 
 		connection.send_result(
 			msg["id"],
-			{"version": WS_MESSAGE_VERSION, "entity": entity, "action": action},
+			{
+				"version": WS_MESSAGE_VERSION,
+				"entity": entity.to_dict(),
+				"action": action,
+			},
 		)
 
 	except OwlError as err:
@@ -228,7 +242,7 @@ async def handle_update_entity(hass, connection, msg):
 			msg["namespace"], msg["entity_id"], msg["data"]
 		)
 		connection.send_result(
-			msg["id"], {"version": WS_MESSAGE_VERSION, "result": res}
+			msg["id"], {"version": WS_MESSAGE_VERSION, "result": res.to_dict()}
 		)
 
 	except OwlError as err:

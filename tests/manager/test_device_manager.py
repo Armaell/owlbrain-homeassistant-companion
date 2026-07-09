@@ -3,7 +3,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.helpers import device_registry as dr
 
-from custom_components.owlbrain.errors import OwlDeviceNotFoundError
+from custom_components.owlbrain.errors import (
+	OwlDeviceNotFoundError,
+	OwlNamespaceCollisionError,
+)
 from custom_components.owlbrain.manager.device_manager import (
 	OwlBrainDeviceManager,
 )
@@ -71,7 +74,7 @@ async def test_create_raises_on_namespace_collision(device_manager, mock_store):
 	mock_store.get_device.return_value = None
 
 	# Act / Assert
-	with pytest.raises(ValueError):
+	with pytest.raises(OwlNamespaceCollisionError):
 		await device_manager.create("ns1", "dev1", {"meta": 1})
 
 

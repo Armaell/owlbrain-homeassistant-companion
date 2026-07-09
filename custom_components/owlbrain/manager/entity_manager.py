@@ -13,6 +13,7 @@ from ..domain import DOMAIN_HANDLERS
 from ..errors import (
 	OwlDeviceNotFoundError,
 	OwlEntityNotFoundError,
+	OwlNamespaceCollisionError,
 	OwlPlatformNotReadyError,
 	OwlUnsupportedDomainError,
 )
@@ -91,7 +92,7 @@ class OwlBrainEntityManager:
 		entities = await self.store.get_entities()
 		for ns, eid in entities:
 			if eid == entity_id and ns != namespace:
-				raise ValueError("Entity already exists in another namespace")
+				raise OwlNamespaceCollisionError(entity_id, ns)
 
 		device_id = metadata.get("device_id")
 		if device_id:

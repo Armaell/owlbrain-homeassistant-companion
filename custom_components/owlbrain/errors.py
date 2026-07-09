@@ -39,6 +39,15 @@ class OwlUnsupportedDomainError(OwlError):
 		)
 
 
+class OwlNamespaceCollisionError(OwlError):
+	code = "namespace_collision"
+
+	def __init__(self, id_: str, existing_namespace: str):
+		self.message = (
+			f"'{id_}' already exists in namespace '{existing_namespace}'"
+		)
+
+
 class OwlInvalidValueError(OwlError):
 	code = "invalid value"
 

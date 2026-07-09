@@ -8,6 +8,7 @@ from custom_components.owlbrain.errors import (
 	OwlDeviceNotFoundError,
 	OwlEntityNotFoundError,
 	OwlInvalidValueError,
+	OwlNamespaceCollisionError,
 	OwlPlatformNotReadyError,
 )
 from custom_components.owlbrain.manager.entity_manager import (
@@ -107,7 +108,7 @@ async def test_create_namespace_collision_raises(
 	store.get_entities.return_value = {("other", "sensor.temp"): {}}
 
 	# Act / Assert
-	with pytest.raises(ValueError):
+	with pytest.raises(OwlNamespaceCollisionError):
 		await entity_manager.create("ns", "sensor.temp", {})
 
 

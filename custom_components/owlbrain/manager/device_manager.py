@@ -6,7 +6,7 @@ import logging
 from homeassistant.helpers import device_registry as dr
 
 from ..const import DOMAIN
-from ..errors import OwlDeviceNotFoundError
+from ..errors import OwlDeviceNotFoundError, OwlNamespaceCollisionError
 from ..models.device import DeviceModel
 from ..store import OwlBrainStore
 from ..utils.ids import build_unique_id_device
@@ -43,7 +43,7 @@ class OwlBrainDeviceManager:
 		# Check for namespace collision
 		for ns, did in devices:
 			if did == device_id and ns != namespace:
-				raise ValueError("Device already exists in another namespace")
+				raise OwlNamespaceCollisionError(device_id, ns)
 
 		device = DeviceModel(
 			namespace=namespace,
