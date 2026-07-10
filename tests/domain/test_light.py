@@ -89,12 +89,17 @@ async def test_update_data(hass):
 				{"hs_color": None},
 			),
 			(
-				"color_temp",
-				250,
+				"color_temp_kelvin",
+				4000,
 				None,
-				{"color_temp": 250, "color_mode": ColorMode.COLOR_TEMP},
+				{"color_temp_kelvin": 4000, "color_mode": ColorMode.COLOR_TEMP},
 			),
-			("color_temp", -1, OwlInvalidValueError, {"color_temp": None}),
+			(
+				"color_temp_kelvin",
+				-1,
+				OwlInvalidValueError,
+				{"color_temp_kelvin": None},
+			),
 			(
 				"xy_color",
 				[0.3, 0.4],
@@ -153,9 +158,9 @@ async def test_actions(hass):
 			),
 			(
 				"async_turn_on",
-				{"color_temp": 4000},
+				{"color_temp_kelvin": 4000},
 				"turn_on",
-				{"state": "on", "color_temp": 4000},
+				{"state": "on", "color_temp_kelvin": 4000},
 			),
 			(
 				"async_turn_on",

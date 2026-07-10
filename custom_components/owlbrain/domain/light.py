@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.components.light import ColorMode, LightEntity
+from homeassistant.components.light import (
+	DEFAULT_MAX_KELVIN,
+	DEFAULT_MIN_KELVIN,
+	ColorMode,
+	LightEntity,
+)
 
 from ..errors import OwlInvalidValueError
 from ..utils.validation import (
@@ -17,6 +22,9 @@ from .base import OwlBrainBaseEntity
 
 class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 	"""Virtual OwlBrain Light."""
+
+	_attr_min_color_temp_kelvin = DEFAULT_MIN_KELVIN
+	_attr_max_color_temp_kelvin = DEFAULT_MAX_KELVIN
 
 	def __init__(self, hass, manager, model) -> None:
 		super().__init__(hass, manager, model)
@@ -38,8 +46,8 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 		return self.owl_model.data.get("brightness")
 
 	@property
-	def color_temp(self) -> int | None:
-		return self.owl_model.data.get("color_temp")
+	def color_temp_kelvin(self) -> int | None:
+		return self.owl_model.data.get("color_temp_kelvin")
 
 	@property
 	def hs_color(self):
@@ -95,7 +103,7 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 			("rgb_color", ColorMode.RGB),
 			("hs_color", ColorMode.HS),
 			("xy_color", ColorMode.XY),
-			("color_temp", ColorMode.COLOR_TEMP),
+			("color_temp_kelvin", ColorMode.COLOR_TEMP),
 			("white", ColorMode.WHITE),
 			("brightness", ColorMode.BRIGHTNESS),
 			("state", ColorMode.ONOFF),
@@ -119,7 +127,7 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 
 		color_keys = [
 			"brightness",
-			"color_temp",
+			"color_temp_kelvin",
 			"hs_color",
 			"xy_color",
 			"rgb_color",
@@ -183,7 +191,7 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 		Accepted keys:
 		- state: "on" | "off"
 		- brightness: 0-255
-		- color_temp: int (mireds, > 0)
+		- color_temp_kelvin: int (Kelvin, > 0)
 		- rgb_color: [r, g, b]
 		- hs_color: [h, s]
 		- available: bool
@@ -197,7 +205,7 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 				"rgb_color",
 				"rgbw_color",
 				"rgbww_color",
-				"color_temp",
+				"color_temp_kelvin",
 				"white",
 			):
 				updated.pop(key, None)
@@ -215,12 +223,12 @@ class OwlBrainLightEntity(OwlBrainBaseEntity, LightEntity):
 				255,
 			)
 
-		if "color_temp" in new_data:
-			ct = ensure_int("color_temp", new_data["color_temp"])
+		if "color_temp_kelvin" in new_data:
+			ct = ensure_int("color_temp_kelvin", new_data["color_temp_kelvin"])
 			if ct <= 0:
-				raise OwlInvalidValueError("color_temp", ct, "above 0")
+				raise OwlInvalidValueError("color_temp_kelvin", ct, "above 0")
 			clear_color_modes()
-			updated["color_temp"] = ct
+			updated["color_temp_kelvin"] = ct
 
 		if "hs_color" in new_data:
 			hs = new_data["hs_color"]
