@@ -16,12 +16,22 @@ from .base import OwlBrainBaseEntity
 
 class OwlBrainCoverEntity(OwlBrainBaseEntity, CoverEntity):
 	@property
-	def state(self) -> str | None:
-		return self.owl_model.data.get("state")
-
-	@property
 	def supported_features(self) -> int:
 		return self.owl_model.metadata.get("supported_features", 3)
+
+	@property
+	def is_opening(self) -> bool | None:
+		state = self.owl_model.data.get("state")
+		if state is None:
+			return None
+		return state == "opening"
+
+	@property
+	def is_closing(self) -> bool | None:
+		state = self.owl_model.data.get("state")
+		if state is None:
+			return None
+		return state == "closing"
 
 	@property
 	def is_closed(self) -> bool | None:
